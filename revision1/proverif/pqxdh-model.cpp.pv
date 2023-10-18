@@ -1,0 +1,697 @@
+(*************************************)
+(*
+
+This files models the PQXDH protocol, as specified in:
+
+[PQXDH] : https://signal.org/docs/specifications/pqxdh/
+	  The PQXDH Key Agreement Protocol
+	  Revision 1, 2023-05-24, Last Updated: 2023-09-20
+
+See the README next to this file for details on the modeling 
+and how to run the file.
+
+This is the ProVerif part of the analysis, see the README at the root
+directory for details on the join analysis.
+
+Authors: Karthikeyan Bhargavan <karthik@cryspen.com>
+	 Charlie Jacomme <charlie.jacomme@inria.fr>
+	 Franziskus Kiefer <franziskus@cryspen.com>
+
+*)
+(*************************************)
+
+(*-----------------------------------*)
+(* A Symbolic Cryptographic Model    *)
+(* for primitives in Sec 2.2 Cryptographic notation *)
+(*-----------------------------------*)
+
+
+(* Elliptic Curve Diffie-Hellman *)
+type scalar.
+type point.
+const G:point.
+fun SMUL(scalar,point):point.
+equation forall y : scalar, z : scalar;
+         SMUL(y, SMUL(z, G)) = SMUL(z, SMUL(y, G)).
+
+letfun s2p(s:scalar) = SMUL(s,G).
+letfun dh(s:scalar,p:point) = SMUL(s,p).
+
+(* KEM Encapsulation *)
+type kempriv.
+type kempub.
+
+fun kempk(kempriv):kempub.
+fun penc(kempub,bitstring):bitstring.
+fun pdec(kempriv,bitstring):bitstring
+reduc forall sk:kempriv,m:bitstring;
+      pdec(sk,penc(kempk(sk),m)) = m.
+
+letfun kempriv2pub(k:kempriv) = kempk(k).
+
+letfun pqkem_enc(pk:kempub) =
+       new ss:bitstring;
+       (penc(pk,ss),ss).
+       
+letfun pqkem_dec(sk:kempriv,ct:bitstring) =
+       pdec(sk,ct).
+
+
+(* Encodings for signing *)
+
+(* Here, we produce a variant where the signature of a an eliptic curve value can be confused with the signature of a KEM pkey. *)
+#ifdef ConfuseKemEc
+
+(* Encoding with key type confusions *)
+fun encodeEC(point):bitstring.
+fun encodeKEM(kempub):bitstring.
+
+
+reduc forall x:scalar, y:point; smul(x,y) = SMUL(x,y).
+
+
+fun ECasKEM(point):kempub [typeConverter].
+
+(* equation for the confusion *)
+equation forall x:scalar; encodeKEM(ECasKEM(SMUL(x,G))) = encodeEC(SMUL(x,G)).
+
+(* equation modeling the fact that a kem based on an EC public key is insecure *)
+reduc forall x:scalar,k:bitstring; weakECasKEM(penc(ECasKEM(SMUL(x,G)),k)) = k.
+
+#else
+
+fun encodeEC(point):bitstring [data].
+fun encodeKEM(kempub):bitstring [data].
+
+
+reduc forall x:scalar, y:point; smul(x,y) = SMUL(x,y).
+
+#endif
+
+
+(* Bitstring manipulations *)
+
+(* Constants *)
+const zero: bitstring.
+const one: bitstring.
+
+(* A zero-filled byte sequence with length equal to the hash output length, in bytes. *)
+const zeroes_sha512:bitstring.
+
+(* A byte sequence containing 32 0xFF bytes if curve is curve25519 *)
+const ff_x25519:bitstring.
+
+(* A byte sequence containing 57 0xFF bytes if curve is curve448 *)
+const ff_x448:bitstring.
+
+(* The concatenation of string representations of the 4 PQXDH parameters info, curve, hash, and pqkem into a single string separated with ‘_’ such as “MyProtocol_CURVE25519_SHA-512_CRYSTALS-KYBER-1024”. *)
+const info_x25519_sha512_kyber1024:bitstring.
+
+(* Unambiguous concatenation, assumes that length of first element is known *)
+fun concatIK(point,point): bitstring [data].
+
+fun concat(bitstring,bitstring): bitstring [data].
+fun concat5(point,point,point,point,bitstring):bitstring [data].
+fun concat4(point,point,point,bitstring):bitstring [data].
+
+(* HKDF *)
+
+(* One-shot HKDF(input_key_material, salt, info) *)
+type symkey.
+fun hkdf(bitstring, bitstring, bitstring) : symkey.
+
+letfun kdf(km:bitstring) =
+       hkdf(concat(ff_x25519,km),
+            zeroes_sha512,
+            info_x25519_sha512_kyber1024).
+
+
+(* AEAD Encryption *)
+type nonce.
+const empty_nonce:nonce.
+
+fun aead_enc(symkey,nonce,bitstring,bitstring):bitstring.
+fun aead_dec(symkey,nonce,bitstring,bitstring):bitstring
+reduc forall k:symkey,n:nonce,m:bitstring,ad:bitstring;
+      aead_dec(k,n,aead_enc(k,n,m,ad),ad) = m.
+
+(* XEdDSA Signatures *)
+fun sign(scalar,bitstring,nonce):bitstring.
+fun verify(point,bitstring,bitstring):bool
+reduc forall sk:scalar,m:bitstring,n:nonce;
+      verify(SMUL(sk,G),m,sign(sk,m,n)) = true.
+
+
+
+(*-----------------------------------*)
+(*          PKI                      *)
+(*-----------------------------------*)
+
+(* Clients representing devices: Alice, Bob, etc. *)
+type client.
+
+(* Global PKI maintained by the Server, checked by Clients *)
+
+(* For each client Bob:
+   - Bob’s curve identity key IKB *)
+   
+table identity_pubkeys(client,point).
+
+
+(*-----------------------------------*)
+(* Security Model and Properties     *)
+(*-----------------------------------*)
+
+(* A channel for the attacker *)
+free att:channel.
+
+(* A channel for the server, but in fact controlled by the attacker. *)
+
+free server:channel.
+
+(* For Testing
+event Reachable().
+query event(Reachable()).
+*)
+
+(* An event triggered when the private keys of a client are compromised *)
+
+(* Handshake Events *)
+event InitDone(client,client,bool,point,point,kempub,symkey). 
+event RespondDone(client,client,bool,point,point,kempub,symkey). 
+
+(* Application Messages and Events *)
+fun app_message(client,client,bitstring):bitstring [private].
+event AppSend(client,client,bitstring).
+event AppRecv(client,client,bitstring).
+
+
+(* Compromise Events *)
+event CompromiseIK(client).
+event CompromiseSPK(client,point).
+event CompromiseOPK(client,point).
+event CompromisePQPK(client,kempub).
+
+#ifdef Reach
+
+(* Reachability Queries, for sanity checks *)
+query i:client, r:client, ts:symkey, m:bitstring, opk:point, spk:point, pqpk:kempub;
+      event(InitDone(i,r,true,opk,spk,pqpk,ts));
+      event(InitDone(i,r,false,opk,spk,pqpk,ts));      
+      event(RespondDone(r,i,true,opk,spk,pqpk,ts));
+      event(RespondDone(r,i,false,opk,spk,pqpk,ts)).
+
+#endif
+
+
+(*-----------------------------------*)
+(* Security Model and Properties     *)
+(*-----------------------------------*)
+
+#ifdef SecrecyInit
+
+query a,b:client, useOPK:bool, opk,spk:point, pqpk:kempub, ts:symkey, i,j1,j2,j3,j4:time;
+      event(InitDone(a,b,useOPK,opk,spk,pqpk,ts))@i && attacker(ts) ==>
+      (* A compromise of IKB in the past is enough to break everything. *)
+      (event(CompromiseIK(b))@j1 && (j1 < i
+       				 ||
+				 (
+				  event(CompromiseSPK(b,spk))@j2				
+				  &&
+				  (event(CompromisePQPK(b,pqpk))@j4 || event(BrokenKEM)@j4)
+ 				 ))
+
+      )
+       ||
+       (event(BrokenDH())@j1 && (j1 < i
+       			     ||  event(CompromisePQPK(b,pqpk))@j4
+			     || event(BrokenKEM)@j4
+       			     ))
+.
+
+
+#endif
+
+#ifdef SecrecyResp
+
+query a,b:client, useOPK:bool, opk,spk:point, pqpk,pqpk2:kempub, ts:symkey, i,j1,j2,j3,j4,j5:time;
+      event(RespondDone(b,a, useOPK, opk,spk,pqpk,ts))@i && attacker(ts) ==>
+      (* The compromise of IKA allows the attacker to play the role of A, and thus know the key *)
+      (event(CompromiseIK(a))@j1 && j1 < i)
+      ||
+      (* If IKA is not corrupted, we must corrupt some information on the side of B *)
+      (event(CompromiseSPK(b,spk))@j1 &&
+             (* A compromise of some SPKb in the past allow an attacker to impersonate any A *)
+             (j1 < i ||
+	       ( 
+	           event(CompromiseIK(b))@j2 && (j2 < i 
+		                                 ||
+						 event(CompromisePQPK(b,pqpk))@j3
+						 ||
+						 event(BrokenKEM)@j3
+						 ||
+						 
+						 (event(CompromisePQPK(b,pqpk2))@j3 && j3 <i)
+						 )
+	        && (useOPK=false || event(CompromiseOPK(b,opk))@j4)
+
+               )
+	      )
+	      
+	 )
+	 ||
+        (event(BrokenDH())@j1 && (j1 < i
+			      	 ||
+				 event(CompromisePQPK(b,pqpk))@j3
+				 ||
+				 event(BrokenKEM)@j4
+				 ||
+				 (event(CompromisePQPK(b,pqpk2))@j3 && j3 <i)
+				 ||
+				 (event(CompromiseIK(b))@j2 && j2 < i)
+				 )
+       )
+.
+
+#endif
+
+#ifdef Authentication
+
+query a,b:client, useOPK:bool, opk,opk2,spk:point, pqpk,pqpk2:kempub, ts:symkey, i,j1,j2,j3,j4,j5:time;
+      event(RespondDone(b,a,useOPK,opk,spk,pqpk,ts))@i ==>
+      (* authentication including over the opk *)
+       (useOPK = true && event(InitDone(a,b,true, opk,spk,pqpk,ts))@j1)
+       ||
+      (* authentication not over the opk *)       
+       (useOPK = false && event(InitDone(a,b,false, opk2,spk,pqpk,ts))@j1)       
+       (* Unless *)
+       ||
+       (* The compromise of IKA allows the attacker to play the role of A, and thus know the key *)
+       (event(CompromiseIK(a))@j1 && j1 < i)
+       ||
+       (* this allow to decrypt ct and reencrypt it for other pq key *)
+       (event(CompromisePQPK(b,pqpk2))@j3 && j3 <i)
+       ||
+       (* this allow to decrypt ct and reencrypt it for other pq key *)       
+       (event(BrokenKEM)@j4 && j4 <i)
+       ||					
+       (* this allow to create a custum PQPK decrypt ct and reencaps against honest PQPK *)
+       (event(CompromiseIK(b))@j3 && j3 <i)
+       ||
+       (* Knowing a SPK completely allows to break auth *)
+       (event(CompromiseSPK(b,spk))@j1 &&  j1 < i )
+       ||
+       (event(BrokenDH())@j1 && j1 < i)
+.
+
+#endif
+
+
+(* Specific queries for attack traces *)
+
+
+#ifdef ConfuseKemEc
+
+
+(* If falsified, the PQ DH security does not work, illustrated here by leaking both DH keys, and expecting that still breaking the KEM should be needed. *)
+
+query a,b:client, useOPK:bool, opk,spk:point, pqpk:kempub, ts:symkey, i,j1,j2,j3,j4:time;
+      event(InitDone(a,b,useOPK,opk,spk,pqpk,ts))@i && attacker(ts) ==>
+      (* A compromise of IKB in the past is enough to break everything. *)
+      (event(CompromiseIK(b))@j1 && (j1 < i
+       				 ||
+				 (
+				  event(CompromiseSPK(b,spk))@j2				
+				  &&
+				  event(CompromisePQPK(b,pqpk))@j4
+ 				 ))
+
+      )
+.
+
+#endif
+
+
+#ifdef ReEncaps
+
+
+query a,b:client, useOPK:bool, opk,opk2,spk:point, pqpk,pqpk2:kempub, ts:symkey, i,j1,j2,j3,j4,j5:time;
+      event(RespondDone(b,a,useOPK,opk,spk,pqpk,ts))@i ==>
+      (* authentication including over the opk *)
+       (useOPK = true && event(InitDone(a,b,true, opk,spk,pqpk,ts))@j1)
+       ||
+      (* authentication not over the opk *)       
+       (useOPK = false && event(InitDone(a,b,false, opk2,spk,pqpk,ts))@j1)       
+       (* Unless *)
+       ||
+       (* The compromise of IKA allows the attacker to play the role of A, and thus know the key *)
+       (event(CompromiseIK(a))@j1 && j1 < i)
+       ||
+       (* Knowing a SPK completely allows to break auth *)
+       (event(CompromiseSPK(b,spk))@j1 &&  j1 < i )
+.
+
+#endif
+
+
+
+nounif z:scalar; attacker(SMUL(z,G)) / 30000.
+(*
+set verboseRules=true. 
+*)
+
+
+
+
+(* processes for DH breaks down *)
+(*  only included based on corresponding flag *)
+
+fun discreteLog(point): scalar 
+reduc forall s:scalar, y:point;
+      discreteLog(SMUL(s,G)) = s [private]. (* Remark, this dL does not work on a g^xy model *)
+
+event BrokenDH.
+
+let dh_attacks() =
+    in (att,p:point);
+    event BrokenDH;
+    out (att,discreteLog(p)).
+
+
+
+(* processes for KEM breaks down *)
+(*  only included based on corresponding flag *)
+fun inversePK(kempub): kempriv
+reduc forall s:kempriv;
+      inversePK(kempk(s)) = s [private].
+
+event BrokenKEM.
+
+let kem_attacks() =
+    in (att,p:kempub);
+    event BrokenKEM;
+    out (att,inversePK(p)).
+
+
+(*-----------------------------------*)
+(* Protocol Processes                *)
+(*-----------------------------------*)
+
+(* PQXDH Protocol *)
+
+(* Alice then sends Bob an initial message containing:
+   - Alice’s identity key IKA
+   - Alice’s ephemeral key EKA
+   - The pqkem ciphertext CT encapsulating SS for PQPKB
+   - Identifiers stating which of Bob’s prekeys Alice used
+   - An initial ciphertext encrypted with some AEAD encryption scheme [5] using AD as associated data and using an encryption key which is either SK or the output from some cryptographic PRF keyed by SK.
+*)
+
+let Initiator(i:client, IKA_s:scalar) =
+    (* we let the attacker choose the responder we will communicate with *)
+    in(att,r:client);
+(*    if not(r=i) then *)
+    (* Initiator public key *)
+    let IKA_p = s2p(IKA_s) in
+    
+    (* Retrieve the responder identity key *)
+    get identity_pubkeys(=r,IKB_p) in
+
+    (* receive from the server the pre key bundles *)
+    in(server, (SPKB_p:point,SPKB_sig:bitstring,PQPKB_p:kempub,PQPKB_sig:bitstring));
+    (* Verify the signatures *)
+    if verify(IKB_p,encodeEC(SPKB_p),SPKB_sig) then
+    if verify(IKB_p,encodeKEM(PQPKB_p),PQPKB_sig) then (* Here, we don't know whether we have a last resort or one time key. *)
+
+    (
+     (* Optionally receive a one time key *)
+     in (server,(useOPK:bool,OPKB_p:point));
+     let (CT:bitstring,SS:bitstring) = pqkem_enc(PQPKB_p) in
+     
+     new EKA_s:scalar;
+(*     event SecEKA(i,EKA_s); *)
+     
+     let EKA_p = s2p(EKA_s) in
+     let DH1 = dh(IKA_s,SPKB_p) in
+     let DH2 = dh(EKA_s,IKB_p) in
+     let DH3 = dh(EKA_s,SPKB_p) in
+     if useOPK then
+     	(
+	let DH4 = dh(EKA_s,OPKB_p) in  
+        let SK = kdf(concat5(DH1,DH2,DH3,DH4,SS)) in
+
+	event InitDone(i,r,true,OPKB_p,SPKB_p,PQPKB_p,SK);
+
+        let ad = concatIK(IKA_p,IKB_p) in
+        new msg_nonce: bitstring;
+        let msg = app_message(i,r,msg_nonce) in
+        let enc_msg = aead_enc(SK,empty_nonce,msg,ad) in
+        (* Send Message *)
+        out(server, (IKA_p,EKA_p,CT,  OPKB_p, SPKB_p, PQPKB_p, enc_msg))
+	)
+#if !defined(DisableNoOPK)	
+     else
+	(
+        let SK = kdf(concat4(DH1,DH2,DH3,SS)) in
+
+	event InitDone(i,r,false,OPKB_p,SPKB_p,PQPKB_p,SK);
+
+        let ad = concatIK(IKA_p,IKB_p) in
+        new msg_nonce: bitstring;
+        let msg = app_message(i,r,msg_nonce) in
+        let enc_msg = aead_enc(SK,empty_nonce,msg,ad) in
+        (* Send Message *)
+        out(server, (IKA_p,EKA_p,CT,  OPKB_p, SPKB_p, PQPKB_p, enc_msg))
+	)
+#endif	
+     ).
+
+
+let Responder_with_OPK(r:client, IKB_s:scalar, SPKB_s:scalar,PQSPKB_s:kempriv)=
+    (
+    let IKB_p = s2p(IKB_s) in    
+    let SPKB_p = s2p(SPKB_s) in
+    let PQSPKB_p = kempriv2pub(PQSPKB_s) in
+
+    (* Generate a new one time OPKB *)
+    new OPKB_s:scalar;
+    let OPKB_p = s2p(OPKB_s) in
+(*    event SecOPK(r, OPKB_s); *)
+    (* send public keys to server *)
+    out (server,OPKB_p );
+
+    (in(att, =r); event CompromiseOPK(r, OPKB_p); out(att,OPKB_s))
+    |
+ 
+
+    (* Receive Message with the currently stored public keys *)
+    (
+    in (server,(IKA_p:point,EKA_p:point,CT:bitstring,=OPKB_p,=SPKB_p,=PQSPKB_p, enc_msg:bitstring)) [precise];
+
+    (* Verify remote identity key *)
+    get identity_pubkeys(i,=IKA_p) in
+(*    if not(r=i) then    *)
+      (
+     (* Retrieve one-time private keys *)
+
+       let SS = pqkem_dec(PQSPKB_s,CT) in
+       let DH1 = dh(SPKB_s,IKA_p) in
+       let DH2 = dh(IKB_s, EKA_p) in
+       let DH3 = dh(SPKB_s,EKA_p) in
+       let DH4 = dh(OPKB_s,EKA_p) in	          
+       let SK =
+
+         	   kdf(concat5(DH1,DH2,DH3,DH4,SS))
+
+       in
+     
+       let ad = concatIK(IKA_p,IKB_p) in
+       let msg = aead_dec(SK,empty_nonce,enc_msg,ad) in
+       event RespondDone(r,i,true,OPKB_p,SPKB_p,PQSPKB_p,SK)
+      )
+     ) 
+    ).
+
+
+let Responder_no_OPK(r:client, IKB_s:scalar, SPKB_s:scalar,PQSPKB_s:kempriv)=
+    (
+    let IKB_p = s2p(IKB_s) in    
+    let SPKB_p = s2p(SPKB_s) in
+    let PQSPKB_p = kempriv2pub(PQSPKB_s) in
+
+    (* Receive Message with the currently stored public keys *)
+    
+    in (server,(IKA_p:point,EKA_p:point,CT:bitstring,=SPKB_p,=PQSPKB_p, enc_msg:bitstring));
+
+    (* Verify remote identity key *)
+    get identity_pubkeys(i,=IKA_p) in
+(*    if not(r=i) then    *)
+      (
+     (* Retrieve one-time private keys *)
+
+       let SS = pqkem_dec(PQSPKB_s,CT) in
+       let DH1 = dh(SPKB_s,IKA_p) in
+       let DH2 = dh(IKB_s, EKA_p) in
+       let DH3 = dh(SPKB_s,EKA_p) in
+       let SK =
+
+	    	   kdf(concat4(DH1,DH2,DH3,SS))
+
+
+       in
+     
+       let ad = concatIK(IKA_p,IKB_p) in
+       let msg = aead_dec(SK,empty_nonce,enc_msg,ad) in
+       event RespondDone(r,i,false,G,SPKB_p,PQSPKB_p,SK)
+      
+     ) 
+    ).
+
+
+let Responder(r:client, IKB_s:scalar) =
+    let IKB_p = s2p(IKB_s) in
+
+    (* Creates a new DH based Signed Pre-Key *)
+    new SPKB_s:scalar;
+(*    event SecSPK(r,SPKB_s); *)
+    let SPKB_p = s2p(SPKB_s) in
+    new zSPKB:nonce;
+    let SPKB_sig = sign(IKB_s,encodeEC(SPKB_p),zSPKB) in
+
+    (* Creates a new KEM based Signed Pre-Key *)
+    new PQSPKB_s:kempriv;
+(*    event SecPQSPK(r,PQSPKB_s); *)
+    let PQSPKB_p = kempriv2pub(PQSPKB_s) in
+    new zPQSPKB:nonce;
+    let PQSPKB_sig = sign(IKB_s,encodeKEM(PQSPKB_p),zPQSPKB) in    
+
+
+    (* send public keys to server *)
+    out (att,(SPKB_p,SPKB_sig,PQSPKB_p,PQSPKB_sig));
+
+    (in(att, =r); event CompromiseSPK(r, SPKB_p); out(att,SPKB_s))
+    |
+    (in(att, =r); event CompromisePQPK(r, PQSPKB_p); out(att,PQSPKB_s))
+    |
+    (! Responder_with_OPK(r, IKB_s, SPKB_s,PQSPKB_s))
+#if !defined(DisableNoOPK)	    
+    | (! Responder_no_OPK(r, IKB_s, SPKB_s,PQSPKB_s))
+#endif    
+   
+.
+
+
+(* A process to create a new client and publish its keys *)
+let Launch_pqxdh_client(p:client) =
+   (* Create a new client *)
+   new IK_s:scalar;
+    let IK_p = s2p(IK_s) in
+(*    event SecIK(p,IK_s); *)
+    insert identity_pubkeys(p,IK_p);
+    (* Publish the public key identity pair. *)
+    out(att,IK_p);
+    (
+      (* Initiator role *)
+      ! Initiator(p, IK_s)
+      (* Responder role without OPK *)   
+      | ! Responder(p, IK_s)
+
+      |
+        (* Compromise of the identity key *)
+        (in(att, =p); event CompromiseIK(p); out(att,IK_s))
+    ).
+
+
+
+
+(* Main Process: any number of clients and members *)
+
+process
+  ! in(att,c:client); Launch_pqxdh_client(c)
+#if !defined(UnbreakableDH)  
+  | ! dh_attacks
+#endif
+#if !defined(UnbreakableKEM)  
+  | ! kem_attacks
+#endif  
+
+
+
+(*************************************)
+(*  EXPECTED RESULTS                 *)
+(*************************************)
+
+(*
+
+$ make 
+
+
+--------------------------------------------------------------
+Verification summary:
+
+Query event(InitDone(a,b,useOPK_1,opk,spk,pqpk,ts))@i_2 && attacker(ts) ==> (event(CompromiseIK(b))@j1 && (i_2 > j1 || (event(CompromiseSPK(b,spk))@j2 && (event(CompromisePQPK(b,pqpk))@j4 || event(BrokenKEM)@j4)))) || (event(BrokenDH)@j1 && (i_2 > j1 || event(CompromisePQPK(b,pqpk))@j4 || event(BrokenKEM)@j4)) is true.
+
+Query event(RespondDone(b,a,useOPK_1,opk,spk,pqpk,ts))@i_2 && attacker(ts) ==> (event(CompromiseIK(a))@j1 && i_2 > j1) || (event(CompromiseSPK(b,spk))@j1 && (i_2 > j1 || (event(CompromiseIK(b))@j2 && (i_2 > j2 || event(CompromisePQPK(b,pqpk))@j3 || event(BrokenKEM)@j3 || (event(CompromisePQPK(b,pqpk2))@j3 && i_2 > j3)) && (useOPK_1 = false || event(CompromiseOPK(b,opk))@j4)))) || (event(BrokenDH)@j1 && (i_2 > j1 || event(CompromisePQPK(b,pqpk))@j3 || event(BrokenKEM)@j4 || (event(CompromisePQPK(b,pqpk2))@j3 && i_2 > j3) || (event(CompromiseIK(b))@j2 && i_2 > j2))) is true.
+
+Query event(RespondDone(b,a,useOPK_1,opk,spk,pqpk,ts))@i_2 ==> (useOPK_1 = true && event(InitDone(a,b,true,opk,spk,pqpk,ts))@j1) || (useOPK_1 = false && event(InitDone(a,b,false,opk2,spk,pqpk,ts))@j1) || (event(CompromiseIK(a))@j1 && i_2 > j1) || (event(CompromisePQPK(b,pqpk2))@j3 && i_2 > j3) || (event(BrokenKEM)@j4 && i_2 > j4) || (event(CompromiseIK(b))@j3 && i_2 > j3) || (event(CompromiseSPK(b,spk))@j1 && i_2 > j1) || (event(BrokenDH)@j1 && i_2 > j1) is true.
+
+--------------------------------------------------------------
+
+
+real	5m59,177s
+
+
+
+
+*)
+
+(*
+$ make reach
+
+--------------------------------------------------------------
+Verification summary:
+
+Query not event(InitDone(i_2,r_1,true,opk,spk,pqpk,ts)) is false.
+
+Query not event(InitDone(i_2,r_1,false,opk,spk,pqpk,ts)) is false.
+
+Query not event(RespondDone(r_1,i_2,true,opk,spk,pqpk,ts)) is false.
+
+Query not event(RespondDone(r_1,i_2,false,opk,spk,pqpk,ts)) is false.
+
+--------------------------------------------------------------
+
+
+real	0m2,599s
+
+
+*)
+
+(* 
+$ make confuseKemEc
+
+--------------------------------------------------------------
+Verification summary:
+
+Query event(InitDone(a,b,useOPK_1,opk,spk,pqpk,ts))@i_1 && attacker(ts) ==> event(CompromiseIK(b))@j1 && (i_1 > j1 || (event(CompromiseSPK(b,spk))@j2 && event(CompromisePQPK(b,pqpk))@j4)) cannot be proved.
+
+--------------------------------------------------------------
+
+
+real	0m9,533s
+
+*)
+
+(* 
+$ make reEncaps
+
+--------------------------------------------------------------
+Verification summary:
+
+Query event(RespondDone(b,a,useOPK_1,opk,spk,pqpk,ts))@i_2 ==> (useOPK_1 = true && event(InitDone(a,b,true,opk,spk,pqpk,ts))@j1) || (useOPK_1 = false && event(InitDone(a,b,false,opk2,spk,pqpk,ts))@j1) || (event(CompromiseIK(a))@j1 && i_2 > j1) || (event(CompromiseSPK(b,spk))@j1 && i_2 > j1) is false.
+
+--------------------------------------------------------------
+
+
+real	0m20,829s
+*)
