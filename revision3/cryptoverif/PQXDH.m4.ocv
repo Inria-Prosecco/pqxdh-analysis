@@ -1,0 +1,784 @@
+(* 
+
+This files models the PQXDH protocol, as specified in:
+
+[PQXDH] : https://signal.org/docs/specifications/pqxdh/
+	  The PQXDH Key Agreement Protocol
+	  Revision 2, 
+
+See the README next to this file for details on the modeling and how
+to run the file. 
+
+This is the CryptoVerif part of the analysis, see the README at the
+root directory for details on the joint analysis.
+
+Authors: Charlie Jacomme <charlie.jacomme@inria.fr>
+
+Based on previous textsecure models by Bruno Blanchet.
+
+*)
+
+set useKnownEqualitiesWithFunctionsInMatching = true.
+
+
+
+
+
+ifdef(`KEM',`
+
+
+(* The proof instructions needed to guide CryptoVerif in the KEM case. *)
+proof {
+
+crypto uf_cma_corrupt(sign) signAseed;
+out_game "g1.cv" occ;
+
+insert before "EKSecA1 <-R Z" "find j <= Nrecv, k <= Nidentity suchthat defined (seed[j,k],  signAseed[k], IKA[k], PQPKB[j,k]) &&  x_IKBsign = pkgen2(signAseed[k]) && PQPKPubB = PQPKB[j,k] then";
+
+SArename CT_2;
+
+out_game "g11.cv" occ;
+
+insert after "RecvOPK(" "find u2 <= NsendOPK suchthat defined(CT_3[u2],PQPKPubB[u2]) && CT_3[u2] = CT_1 && PQPKB = PQPKPubB[u2]  then";
+insert after "RecvOPK(" "find u1 <= Nidentity suchthat defined(signAseed[u1], IKA[u1]) && 
+ x_IKAsign = pkgen2(signAseed[u1]) then if defined(corrupted_2[u1]) then";
+
+insert after "kseed_4 <-R" "let fencap = kempair(kem_secret(PQPKPubB,kseed_4),kem_encap(PQPKPubB,kseed_4)) in";
+out_game "g3.cv" occ;
+
+
+
+replace at_nth 1 1 "SS: kemsec <- {[0-9]+}" "get_secret(fencap_2)";
+replace at_nth 1 1 "CT_3: ciphertext <- {[0-9]+}" "get_encap(fencap_2)";
+
+crypto ind_cca(Encap)  [variables: seed -> seed, kseed_4 -> kseed_1 .];
+
+out_game "g31.cv" occ;
+
+insert before "EKSecA1p <-R Z" "find j2 <= Nrecv, k2 <= Nidentity suchthat defined (seed_1[j2,k2],  signAseed[k2], IKA[k2], PQPKB[j2,k2]) &&  x_IKBsignp = pkgen2(signAseed[k2]) && PQPKPubBp = PQPKB[j2,k2] then";
+
+SArename CTp_2;
+
+out_game "g32.cv" occ;
+
+insert after "RecvNoOPK(" "find u22 <= NsendOPK suchthat defined(CT_3[u22],PQPKPubB[u22]) && CT_3[u22] = CTp_1 && PQPKB = PQPKPubB[u22]  then";
+insert after "RecvNoOPK(" "find u12 <= Nidentity suchthat defined(signAseed[u12], IKA[u12]) && 
+ x_IKAsignp = pkgen2(signAseed[u12]) then if defined(corrupted_2[u12]) then";
+
+
+insert after "kseedp_2 <-R" "let fencap = kempair(kem_secret(PQPKPubBp,kseedp_2),kem_encap(PQPKPubBp,kseedp_2)) in";
+out_game "g33.cv";
+replace at_nth 1 1 "SSp: kemsec <- {[0-9]+}" "get_secret(fencap_3)";
+replace at_nth 1 1 "CTp_3: ciphertext <- {[0-9]+}" "get_encap(fencap_3)";
+
+
+crypto ind_cca(Encap)  [variables: seed_1 -> seed, kseedp_2 -> kseed_1.];
+
+crypto prf(H) *;
+out_game "g4.cv" ;
+
+crypto int_ctxt(enc) *;
+crypto ind_cpa(enc) **;
+out_game "g5.cv";
+success
+}
+
+',`')
+
+
+ifdef(`DH',`
+
+
+(* The proof instructions needed to guide CryptoVerif in the DH case. *)
+proof {
+crypto uf_cma_corrupt(sign) signAseed;
+out_game "g1.cv" occ;
+
+insert before "EKSecA1 <-R Z" "find j <= Nrecv, k <= Nidentity suchthat defined (SPKPubB1[j,k], IKA[k]) && pow8(SPKPubB) = pow8(SPKPubB1[j,k]) && pow8(x_IKB) = pow8(IKA[k]) then";
+insert after "RecvOPK(" "find u1 <= Nidentity suchthat defined(signAseed[u1], IKA[u1]) && pow8(x_IKA) = pow8(IKA[u1]) then if defined(corrupted_1[u1]) then";
+
+out_game "g11.cv" occ;
+insert after "OH_1(" "let (subGtoG(x1p), subGtoG(x2p), subGtoG(x3p), subGtoG(x4p), x5p : kemsec, 
+concatKDFInfo(x6p, x7p , x8p, x9p, x10p    )
+ ) = (x1_1, x2_1, x3_1, x4_1, x5_1, x6) in";
+crypto rom(H2);
+
+out_game "g2.cv" occ;
+insert before "EKSecA1p <-R Z" "find j2 <= Nrecv, k2 <= Nidentity suchthat defined (SPKPubB1[j2,k2], IKA[k2]) && pow8(SPKPubBp) = pow8(SPKPubB1[j2,k2]) && pow8(x_IKBp) = pow8(IKA[k2]) then";
+insert after "RecvNoOPK(" "find u2 <= Nidentity suchthat defined(signAseed[u2], IKA[u2]) && pow8(x_IKAp) = pow8(IKA[u2]) then if defined(corrupted_1[u2]) then";
+out_game "g12.cv"occ;
+
+insert after "OH(" "let (subGtoG(x1_1p), subGtoG(x2_1p), subGtoG(x3_1p), x4_1p : kemsec, concatKDFInfo(x5_1p, x6_1p , x7_1p, x8_1p, x9_1p )) = (x1, x2, x3, x4, x5) in";
+crypto rom(H1);
+
+out_game "g3.cv";
+
+crypto gdh(gexp_div_8) [variables: secIKA0 -> a];
+(* remark here, in the previous call to gdh, if we also do it on other variables, then CryptoVerif in fact fails to do the later proofs and simplifications. *)
+
+out_game "g35.cv";
+
+crypto int_ctxt(enc) *;
+crypto ind_cpa(enc) **;
+out_game "g4.cv";
+crypto int_ctxt_corrupt(enc) r_23;
+
+crypto int_ctxt_corrupt(enc) r_42;
+
+
+
+success
+}
+
+
+',`')
+
+
+
+
+(* KEM definitions *)
+type kempkey [bounded].
+type kemskey [bounded].
+type ciphertext.
+type kem_seed [large,fixed].
+type kem_enc_seed [large,fixed].
+
+type kemsec [fixed].
+
+fun kempkgen(kem_seed):kempkey.
+fun kemskgen(kem_seed):kemskey.
+
+fun decap(ciphertext, kemskey): kemsec.
+
+fun kem_secret(kempkey, kem_enc_seed) : kemsec.
+fun kem_encap(kempkey, kem_enc_seed): ciphertext.
+
+type encaps_return.
+fun kempair(kemsec,ciphertext) : encaps_return [data].
+
+letfun encaps(pk : kempkey, kseed : kem_enc_seed) =
+   kempair(kem_secret(pk,kseed ),  kem_encap(pk,kseed)).
+
+equation forall kseed: kem_seed, seed:kem_enc_seed;
+   decap( kem_encap( kempkgen(kseed), seed),  kemskgen(kseed)) = kem_secret( kempkgen(kseed),seed).
+
+fun get_encap(encaps_return) : ciphertext.
+fun get_secret(encaps_return) : kemsec.
+
+equation forall c:ciphertext, s:kemsec;
+   get_encap( kempair(s,c)) = c.
+
+equation forall c:ciphertext, s:kemsec;
+   get_secret(kempair( s,c))= s.
+
+ifdef(`KEM',`
+
+(* KEM security assumptions -> IND-CCA *)
+
+
+param Nc, Qeperuser, Qdperuser.
+
+proba CCA.
+
+table E(Nc, ciphertext, kemsec).
+
+equiv(ind_cca(Encap))
+   
+    foreach i <= Nc do seed <-R kem_seed; (
+      Opk() := return(kempkgen(seed))
+      |    
+      foreach id <= Qdperuser do 
+        OADecap(enc: ciphertext)  [useful_change] :=
+          return(decap(enc, kemskgen(seed))) 
+      )      
+     |
+    foreach ie <= Qeperuser do
+      kseed <-R kem_enc_seed; (
+
+           OE(pk_R:kempkey)  [useful_change]  := return(  encaps(pk_R, kseed) ) 
+	   
+	    )
+  <=(CCA(time, Nc, #OE, #OADecap))=>
+    foreach i <= Nc do seed <-R kem_seed; (
+      Opk() := return(kempkgen(seed)) |
+      foreach id <= Qdperuser do (
+        OADecap(cd: ciphertext) :=	 
+	  get E(=i, =cd, k2) in (
+            return(k2)
+          ) else (
+            return(decap(cd, kemskgen(seed)))
+	    
+          )) )   
+   |
+   foreach ie <= Qeperuser do
+      kseed <-R kem_enc_seed;
+      (     
+      OE(pk_R: kempkey) := 
+      find i2 <= Nc suchthat defined(seed[i2]) && pk_R = kempkgen(seed[i2]) then (
+              k1 <-R kemsec;
+	      insert E(i2, kem_encap(pk_R, kseed) , k1);
+              return( kempair(k1, kem_encap(pk_R, kseed)))
+          ) else (
+            return(encaps(pk_R, kseed) )
+          ) 
+
+    ) 
+
+    
+    .
+',`')
+
+
+(* We always have some basic properties oj the KEM, e.g., public keys
+are not independent of their seed. *)
+
+proba KEMcoll1.
+proba KEMcoll2.
+
+collision r <-R kem_seed; forall Y: kempkey;
+	  return(kempkgen(r) = Y) <=(KEMcoll1)=> return(false) if Y independent-of r.
+
+
+collision r <-R kem_seed; k <-R kem_enc_seed; forall Y: ciphertext;
+	  return(kem_encap(kempkgen(r),k) = Y) <=(KEMcoll2)=> return(false) if Y independent-of k.
+
+
+
+
+(* DH definitions *)
+type emkey [fixed,large]. 
+
+type Z [bounded,large,nonuniform]. (* Exponents *)
+type G [bounded,large,nonuniform]. (* Diffie-Hellman group *)
+type subG [bounded,large,nonuniform]. (* Diffie-Hellman group *)
+
+(* Gap Diffie-Hellman *)
+(* In the PQ setting, we only assume the informatic theoritic collision properties *)
+
+(* Note: the secret keys in Signal are really normalized to be multiples of k,
+   as specified in RFC 7748. The normalization is commented out in the exponentiation
+   function:
+https://github.com/signalapp/libsignal-protocol-javascript/blob/f5a838f1ccc9bddb5e93b899a63de2dea9670e10/native/curve25519-donna.c/#L860
+   but done when generating a key pair:
+https://github.com/signalapp/libsignal-protocol-javascript/blob/f5a838f1ccc9bddb5e93b899a63de2dea9670e10/src/curve25519_wrapper.js#L25
+*)
+
+expand DH_X25519(G, Z, g, gexp, mult, subG, g_8, gexp_div_8, gexp_div_8p, pow8, subGtoG, is_zero_G, is_zero_subG).
+
+
+ifdef(`DH',`
+
+(* We now make the gapDH assumption. *)
+proba psqGDH.
+proba pDistRerandom.
+expand square_GDH_RSR(subG, Z, g_8, gexp_div_8, gexp_div_8p, mult, psqGDH, pDistRerandom).
+
+',`')
+
+
+(* Key derivation *)
+type kdf_info.
+
+
+ifdef(`KEM',`
+
+
+(* We model the kdf as a prf function, which is keyed by the KEM shared secret. *)
+fun H(bitstring,kemsec): emkey.
+
+proba Pprf.
+equiv(prf(H)) special prf("key_last", H, Pprf, (k, r, x, y, z, u)).
+
+equiv(prf_partial(H)) special prf_partial("key_last", H, Pprf, (k, r, x, y, z, u)) [manual].
+
+
+fun c4(G,G,G,kdf_info):bitstring [data].
+fun c5(G,G,G,G,kdf_info):bitstring [data].
+
+letfun H5(g1:G,g2:G,g3:G, k:kemsec, i:kdf_info) = H(c4(g1,g2,g3,i),k).
+letfun H6(g1:G,g2:G,g3:G,g4:G, k:kemsec, i:kdf_info) = H(c5(g1,g2,g3,g4,i),k).
+
+equation forall g1,g1p:G, g2,g2p:G, g3,g3p:G, g4:G, i,ip:kdf_info;
+       c4(g1,g2,g3,i) <> c5(g1,g2,g3,g4,i).
+
+
+',`')
+
+
+ifdef(`DH',`
+
+
+(* we model the kdf a Random Oracles. *)
+
+type hashkey [large,fixed]. (* unused in PQ setting *)
+type hashkey2 [large,fixed]. (* unused in PQ setting *)
+
+expand ROM_hash_large_5(hashkey, G, G, G, kemsec, kdf_info, emkey, H1, hashoracle, qH2).
+expand ROM_hash_large_6(hashkey2, G, G ,G ,G, kemsec, kdf_info, emkey, H2, hashoracle2, qH3).
+
+letfun H5(g1:G,g2:G,g3:G, k:kemsec, i:kdf_info,hk:hashkey) = H1(hk,g1,g2,g3,k,i).
+
+letfun H6(g1:G,g2:G,g3:G,g4:G, k:kemsec, i:kdf_info, hk:hashkey2) = H2(hk,g1,g2,g3,g4,k,i).
+
+
+',`')
+
+
+
+
+(* Signatures *)
+
+
+type keyseed [large, fixed].
+type pkey [bounded].
+type skey [bounded].
+type t_sign.
+
+
+proba Psign.
+proba Psigncoll.
+expand UF_CMA_proba_signature(keyseed, pkey, skey, bitstring, t_sign, skgen, pkgen, sign, checksign, Psign, Psigncoll).
+
+
+fun concatKDFInfo(G,pkey,G,pkey,kempkey):kdf_info [data].
+
+
+
+(* Encoding of public keys for signatures *)
+
+fun encodeEC(G) : bitstring [data].
+fun encodeKEM(bool,kempkey) : bitstring [data].
+
+
+letfun signKEM(pk:kempkey,sk:skey) = sign(encodeKEM(true,pk),sk).
+letfun checksignKEM(m:kempkey, p:pkey, s:t_sign) = checksign(encodeKEM(true,m),p,s).
+
+
+letfun signEC(el:G,sk:skey) = sign(encodeEC(el),sk).
+letfun checksignEC(m:G, p:pkey,s:t_sign) = checksign(encodeEC(m),p,s).
+
+
+(* We rely here on the assumption made in the spec that the encodings of public keys are disjoints. 
+   This is both stated explicitly in [PQXDH], and verified in the implementation, with the encodings having a unique one byte prefix:
+
+   (curve25519 |-> 0x05, curve448 |-> 0x06, Kyber768 |-> 0x07, Kyber1024 |-> 0x08)
+
+This correspond to the KeyType field of libsignal, as defined here for KEMs
+https://github.com/signalapp/libsignal/blob/d1f9dff273e6da059af699c6afe860fb93406032/rust/protocol/src/kem.rs#L153
+and here for curve 25519:
+https://github.com/signalapp/libsignal/blob/d1f9dff273e6da059af699c6afe860fb93406032/rust/protocol/src/curve.rs#L33
+
+*)
+
+
+equation forall pkdh:G, pkkem:kempkey, t:bool;
+       encodeEC(pkdh) <> encodeKEM(t,pkkem).
+
+(* AEAD *)
+
+type t_data.
+proba Penc.
+proba Pencctxt.
+
+
+(* We assume  IND-CPA + INT-CTXT for the AEAD, in both cases. *)
+expand AEAD(emkey, bitstring, bitstring, t_data, enc, dec, injbot, Zero, Penc, Pencctxt).
+
+const const1: bitstring.
+const zeroAD : t_data.
+
+
+
+
+param Nidentity, Nrecv, NsendOPK, NsendNoOPK, Nsignedprekey, Nsignedprekey2.
+
+(* Table of keys *)
+table keys(Z, G, skey, pkey).
+(* Table of keys of corrupted participants *)
+table corrupted(G,pkey).
+
+
+(* Security properties *)
+
+event SendWithOPK(G, pkey, G, pkey, G, G, G, kempkey, bitstring).
+event RecvWithOPK(bool, G, pkey, G, pkey, G, G, G, kempkey, bitstring).
+event SendWithoutOPK(G, pkey, G, pkey, G, G, kempkey, bitstring).
+event RecvWithoutOPK(bool, G, pkey, G, pkey, G, G, kempkey, bitstring).
+(* Arguments of events
+   - for RecvWithOPK/RecvWithoutOPK: a boolean true when Blake is corrupted 
+   - public keys of sender (DH and signature), IKA and IKAsign
+   - public keys of receiver (DH and signature), IKB and IKBsign
+   - signed ephemeral, SPKB.
+   - one-time ephemeral [optional], OPK,
+   - sender first ephemeral, EPK,
+   - the signed kem public key, PQPK,
+   - sent message
+*)
+
+ifdef(`DH',`
+
+query Bcorrupted:bool,a0:G,as:pkey,b0:G,bs:pkey,sb:G,sb2:G,ob:G,a1:G,ob2:G,a12:G,pk1:kempkey,m:bitstring;
+      inj-event(RecvWithOPK(Bcorrupted,a0,as,b0,bs,sb,ob,a1,pk1,m)) ==> inj-event(SendWithOPK(a0,as,b0,bs,sb2,ob2,a12,pk1,m)) && pow8(ob) = pow8(ob2) && pow8(a1) = pow8(a12) && pow8(sb) = pow8(sb2) && (Bcorrupted || sb = sb2)
+      public_vars secb.
+query Bcorrupted:bool,a0:G,as:pkey,b0:G,bs:pkey,sb:G,sb2:G,a1:G,a12:G,pk1:kempkey,m:bitstring;
+      event(RecvWithoutOPK(Bcorrupted,a0,as,b0,bs,sb,a1,pk1,m)) ==> event(SendWithoutOPK(a0,as,b0,bs,sb2,a12,pk1,m)) && pow8(a1) = pow8(a12) && pow8(sb) = pow8(sb2) && (Bcorrupted || sb = sb2)
+      public_vars secb.
+
+(* Blake receives => Alex sent is proved provided Alex is not corrupted 
+   (event Recv/RecvWithoutOPK is executed when Alex is not corrupted). 
+   That proves KCI resistance against the compromise of long-term keys.
+.
+   We cannot prove that sb = sb2 when Blake signature key is
+   compromised. The adversary can then forge a signature of the signed
+   ephemeral sb. The Diffie-Hellman key exchange just guarantees that
+   pow8(sb) = pow8(sb2). 
+
+   To note, we cannot prove that the two parties agree on the KEM public key used.
+
+*)
+
+
+',`')
+
+
+(* Identifiers for public keys *)
+
+type ids.
+
+fun idPKDH(G):ids.
+fun idPKKEM(kempkey):ids.
+
+query secret secb [cv_bit].
+
+(* The secrecy of secb shows the secrecy of the message sent by Alex to Blake,
+   provided Blake is not corrupted yet when Alex send the message (secb is used
+   to choose between 2 messages only when Blake is not corrupted). That 
+   shows in particular forward secrecy. *)
+
+
+(********************)
+(**** INITIATOR *****)
+(********************)
+
+(* Alex using prekeys and sending a message to a participant (Blake or other).
+   The received x_IKB:G, x_IKBsign:pkey choose Alex's interlocutor. 
+   This sender uses an optional OPK.
+*)
+(* section 3.3 *)
+let SendInitialWithOPK(secb1:bool,secIKA:Z , IKA:G, secIKAsign:skey, IKAsign:pkey
+ifdef(`DH',`, hk2:hashkey2',`')
+)
+=
+   (* Key exchange + send message m1 or m2 *)
+   SendFirstMessageOPK(x_IKB:G, x_IKBsign:pkey, SPKPubB:G,SPKsign:t_sign,OPKPubB:G,PQPKPubB:kempkey,PQPKsign:t_sign,m1: bitstring, m2:bitstring) :=
+
+
+   (* Classical DH part *)
+   new EKSecA1: Z;
+   let EKPubA = gexp(g, EKSecA1) in
+   let dh1 = gexp(SPKPubB, secIKA) in
+   let dh2 = gexp(x_IKB, EKSecA1) in
+   let dh3 = gexp(SPKPubB, EKSecA1) in
+   let dh4 = gexp(OPKPubB, EKSecA1) in
+
+   (* Kem additionnal part *)
+   new kseed: kem_enc_seed;
+   
+   let fencap = encaps(PQPKPubB,kseed) in
+   let SS = get_secret(fencap) in
+   let CT = get_encap(fencap) in
+   let info:kdf_info = concatKDFInfo(IKA,IKAsign,x_IKB,x_IKBsign,PQPKPubB) in
+   let SK_opk : emkey = H6(dh1, dh2, dh3, dh4, SS, info
+   ifdef(`DH',`, hk2',`')
+   ) in
+
+
+   ifdef(`KEM',`get keys(secIKB, x_IKB2, secIKBsign, =x_IKBsign) in',`')
+   ifdef(`DH',`get keys(secIKB, =x_IKB, secIKBsign, =x_IKBsign) in',`')   
+   (
+       ifdef(`KEM',`get corrupted(dummy,=x_IKBsign) in',`')
+       ifdef(`DH',`get corrupted(=x_IKB,dummy) in',`')       
+       (
+           (* Alex talks to a corrupted participant; the message cannot be secret *)
+           if checksignEC(SPKPubB, x_IKBsign, SPKsign) then
+           if checksignKEM(PQPKPubB, x_IKBsign, PQPKsign) then	   
+	   if m1 = m2 then
+	   let msg = m1 in
+           let cipher = enc(msg, zeroAD, SK_opk) in
+           event SendWithOPK(IKA,IKAsign,x_IKB,x_IKBsign,SPKPubB,OPKPubB,EKPubA,PQPKPubB,msg);
+           return((IKA, IKAsign), EKPubA,  idPKDH(SPKPubB), idPKDH(OPKPubB), idPKKEM(PQPKPubB), CT, cipher) 
+       )
+       else
+       (
+	   (* Alex talks to a honest participant Blake *)
+           if checksignEC(SPKPubB, x_IKBsign, SPKsign) then
+           if checksignKEM(PQPKPubB, x_IKBsign, PQPKsign) then	   	   
+           (* Check that m1 and m2 have the same length *)
+           if Zero(m1) = Zero(m2) then
+           (* Send either m1 or m2 depending on the value of the secret bit b *)
+           let msg = if_fun(secb1, m1, m2) in
+           let cipher = enc(msg, zeroAD, SK_opk) in
+           event SendWithOPK(IKA,IKAsign,x_IKB,x_IKBsign,SPKPubB,OPKPubB,EKPubA,PQPKPubB,msg);
+           return((IKA, IKAsign), EKPubA,  idPKDH(SPKPubB), idPKDH(OPKPubB), idPKKEM(PQPKPubB), CT, cipher)
+       )
+   )
+   else
+   (
+       (* Alex talks to a dishonest participant *)
+       if checksignEC(SPKPubB, x_IKBsign, SPKsign) then
+       if checksignKEM(PQPKPubB, x_IKBsign, PQPKsign) then	          
+       if m1 = m2 then
+       let msg = m1 in
+       let cipher = enc(msg, zeroAD, SK_opk) in
+       return((IKA, IKAsign), EKPubA,  idPKDH(SPKPubB), idPKDH(OPKPubB), idPKKEM(PQPKPubB), CT, cipher)
+   ).
+
+(* Same as before, but without the optional OPK. *)
+let SendInitialNoOPK(secb1:bool,secIKAp:Z , IKAp:G, secIKAsignp:skey, IKAsignp:pkey
+ifdef(`DH',`, hk:hashkey',`')
+) =
+   (* Key exchange + send message m1 or m2 *)
+   SendFirstMessageNoOPK(x_IKBp:G, x_IKBsignp:pkey, SPKPubBp:G,SPKsignp:t_sign,PQPKPubBp:kempkey,PQPKsignp:t_sign,m1p: bitstring, m2p:bitstring) :=
+
+   (* Classical DH part *)
+   new EKSecA1p: Z;
+   let EKPubAp = gexp(g, EKSecA1p) in
+   let dh1 = gexp(SPKPubBp, secIKAp) in
+   let dh2 = gexp(x_IKBp, EKSecA1p) in
+   let dh3 = gexp(SPKPubBp, EKSecA1p) in
+
+   (* Kem additionnal part *)
+   new kseedp: kem_enc_seed;
+   
+   let fencap = encaps(PQPKPubBp,kseedp) in
+   let SSp = get_secret(fencap) in
+   let CTp = get_encap(fencap) in
+   let INFOp:kdf_info = concatKDFInfo(IKAp,IKAsignp,x_IKBp,x_IKBsignp,PQPKPubBp) in   
+   let SK_nopk = H5(dh1, dh2, dh3, SSp, INFOp
+   ifdef(`DH',`, hk',`')
+   ) in
+      
+      ifdef(`KEM',`get keys(secIKB, x_IKB, secIKBsign, =x_IKBsignp) in',`')
+      ifdef(`DH',`get keys(secIKB, =x_IKBp, secIKBsign, =x_IKBsignp) in',`')      
+   (
+       ifdef(`KEM',`get corrupted(dummy,=x_IKBsignp) in',`')
+       ifdef(`DH',`get corrupted(=x_IKBp,dummy) in',`')          
+       (
+           (* Alex talks to a corrupted participant; the message cannot be secret *)
+           if checksignEC(SPKPubBp, x_IKBsignp, SPKsignp) then
+           if checksignKEM(PQPKPubBp, x_IKBsignp, PQPKsignp) then	   	   
+	   if m1p = m2p then
+	   let msg = m1p in
+           let cipher = enc(msg, zeroAD, SK_nopk) in
+           event SendWithoutOPK(IKAp,IKAsignp,x_IKBp,x_IKBsignp,SPKPubBp,EKPubAp,PQPKPubBp,msg);
+           return((IKAp, IKAsignp), EKPubAp,  idPKDH(SPKPubBp), idPKKEM(PQPKPubBp), CTp, cipher)
+       )
+       else
+       (
+	   (* Alex talks to a honest participant Blake *)
+           if checksignEC(SPKPubBp, x_IKBsignp, SPKsignp) then
+           if checksignKEM(PQPKPubBp, x_IKBsignp, PQPKsignp) then	   	   
+           (* Check that m1 and m2 have the same length *)
+           if Zero(m1p) = Zero(m2p) then
+           (* Send either m1 or m2 depending on the value of b *)
+           let msg = if_fun(secb1, m1p, m2p) in
+           let cipher = enc(msg, zeroAD, SK_nopk) in
+           event SendWithoutOPK(IKAp,IKAsignp,x_IKBp,x_IKBsignp,SPKPubBp,EKPubAp,PQPKPubBp,msg);
+           return((IKAp, IKAsignp), EKPubAp,  idPKDH(SPKPubBp), idPKKEM(PQPKPubBp), CTp, cipher)
+       )
+   )
+   else
+   (
+       (* Alex talks to a dishonest participant *)
+       if checksignEC(SPKPubBp, x_IKBsignp, SPKsignp) then
+       if checksignKEM(PQPKPubBp, x_IKBsignp, PQPKsignp) then
+       if m1p = m2p then
+       let msg = m1p in
+       let cipher = enc(msg, zeroAD, SK_nopk) in
+       return((IKAp, IKAsignp), EKPubAp, idPKDH(SPKPubBp), idPKKEM(PQPKPubBp), CTp, cipher)
+   ).
+
+
+(* Blake generating prekeys and running the protocol, with Alex
+   or with any other participant *)
+
+(* Sec 3.4 of spec *)
+let GenOPKThenRecv(secIKB : Z, IKB : G, secIKBsign : skey, IKBsign : pkey
+   ifdef(`DH',`, hk:hashkey, hk2:hashkey2',`')
+) =
+   GenSPK():=
+   (* Signed PQPK, last resort that can be reused *)
+   new seed:kem_seed;
+   let PQPKB = kempkgen(seed) in   
+   let PQPKBsig = signKEM(PQPKB, secIKBsign) in    
+
+
+  (* new SPK DH based *)   
+   new SPKSecB1: Z;
+   let SPKPubB1: G = gexp(g, SPKSecB1) in
+   let SPKsignature = signEC(SPKPubB1, secIKBsign) in
+   return(SPKPubB1,SPKsignature, PQPKB, PQPKBsig);
+   ((
+   ! Nsignedprekey
+   (* One-time prekey DH based*)
+   GenOPK():=
+   new OPKSecB1: Z;
+   let OPKPubB = gexp(g, OPKSecB1) in
+   return(OPKPubB);
+   (* 2nd part of key exchange, 
+      using prekey OPKPubB and signed prekey SPKPubB1 *)
+   RecvOPK(x_IKA: G,x_IKAsign: pkey, EPKPubA: G, idSPK:ids, idOPK:ids, idPQPK:ids, CT : ciphertext, msgenc: bitstring) :=
+
+   (* Here, we check if the keys we already have in the current
+   process state have the same id has the received ones. This simulate
+   a general process fetching the public keys from the received id, by
+   matching the id against the ids of the keys in the database. *)
+   
+   if idSPK = idPKDH(SPKPubB1) then
+   if idOPK = idPKDH(OPKPubB) then   
+   if idPQPK = idPKKEM(PQPKB) then
+   
+   let dh1 = gexp(x_IKA,SPKSecB1) in
+   let dh2 = gexp(EPKPubA, secIKB) in
+   let dh3 = gexp(EPKPubA, SPKSecB1) in
+   let dh4 = gexp(EPKPubA, OPKSecB1) in
+
+   let ss = decap(CT,kemskgen(seed)) in
+   let info:kdf_info = concatKDFInfo(x_IKA,x_IKAsign,IKB,IKBsign,PQPKB) in
+   let sk_opk = H6(dh1, dh2, dh3, dh4, ss, info
+   ifdef(`DH',`, hk2',`')
+   ) in
+
+   let injbot(msg) = dec(msgenc, zeroAD, sk_opk) in
+   ifdef(`KEM',`
+	get keys(secIKA, x_IKA2, secIKAsign, =x_IKAsign) in
+            (* In the KEM case, we simply have no authentication property *)
+(*	    find peer_i1 <= NsendOPK, peer_i2 <= Nidentity  suchthat
+	    defined(SK_opk[peer_i1,peer_i2]) && SK_opk[peer_i1,peer_i2] = sk_opk then
+                 yield
+	    else*)
+	    	    yield
+	else
+ 	 return(msg)
+',`')	 	 
+    
+ifdef(`DH',`
+   (* Execute event Recv only if the sender Alex is honest and not corrupted *)
+     get keys(secIKA, =x_IKA, secIKAsign, x_IKAsign2) in   
+     (
+     get corrupted(=x_IKA,dummy) in
+        yield
+     else
+	let Bcorrupted = get corrupted(=IKB,dummy2) in true else false in
+        event RecvWithOPK(Bcorrupted,x_IKA,x_IKAsign,IKB,IKBsign,SPKPubB1,OPKPubB,EPKPubA,PQPKB,msg)
+      )
+     else
+      return(msg)
+',`')
+
+   )
+
+  |
+
+   (
+   ! Nsignedprekey2
+
+   (* Version without the optional one-time prekey *)   
+   RecvNoOPK(x_IKAp: G,x_IKAsignp: pkey, EPKPubAp: G,  idSPK:ids, idPQPK:ids, CTp : ciphertext, msgencp: bitstring) :=
+
+   (* Here, we check if the keys we already have in the current
+   process state have the same id has the received ones. This simulate
+   a general process fetching the public keys from the received id, by
+   matching the id against the ids of the keys in the database. *)
+   
+   if idSPK = idPKDH(SPKPubB1) then
+   if idPQPK = idPKKEM(PQPKB) then
+
+
+
+   let dh1 = gexp(x_IKAp,SPKSecB1) in
+   let dh2 = gexp(EPKPubAp, secIKB) in
+   let dh3 = gexp(EPKPubAp, SPKSecB1) in
+
+   let ss = decap(CTp,kemskgen(seed)) in
+   let infop:kdf_info = concatKDFInfo(x_IKAp,x_IKAsignp,IKB,IKBsign,PQPKB) in   
+   let sk_nopk = H5(dh1, dh2, dh3, ss,  infop
+   ifdef(`DH',`, hk',`')
+   ) in
+   let injbot(msg) = dec(msgencp, zeroAD, sk_nopk) in
+   ifdef(`KEM',`   
+	get keys(secIKA, x_IKA2p, secIKAsign, =x_IKAsignp) in
+            (* In the KEM case, we simply have no authentication property *)		
+	    yield
+	else
+ 	 return(msg)
+',`')	 	 
+    
+ifdef(`DH',`
+     get keys(secIKA, =x_IKAp, secIKAsign, x_IKAsignp2) in   
+     (
+     get corrupted(=x_IKAp,dummy2) in
+        yield
+     else
+	let Bcorrupted = get corrupted(=IKB,dummy) in true else false in
+        event RecvWithoutOPK(Bcorrupted,x_IKAp,x_IKAsignp,IKB,IKBsign,SPKPubB1,EPKPubAp,PQPKB,msg)
+      )
+     else
+      return(msg)
+',`')
+   
+    )
+)
+.
+
+
+ 
+process
+    Start() := 
+    new secb: bool;
+    ifdef(`DH',`new hk:hashkey;',`')
+    ifdef(`DH',`new hk2:hashkey2;',`')        
+    return();
+
+    ! Nidentity
+    (
+    InitPrin() :=
+    new secIKA0:Z;
+    let IKA = gexp(g,secIKA0) in
+    new signAseed: keyseed;
+    let secIKAsign = skgen(signAseed) in
+    let IKAsign = pkgen(signAseed) in
+    insert keys(secIKA0, IKA, secIKAsign, IKAsign);
+    return(IKA, IKAsign); 
+    (* Corruption, for forward secrecy and key compromise impersonation *)
+    ( (Corrupt() :=
+       insert corrupted(IKA,IKAsign);
+       
+       return(secIKA0, secIKAsign))
+    | (!Nrecv run GenOPKThenRecv(secIKA0,IKA,secIKAsign,IKAsign
+      	         ifdef(`DH',`, hk, hk2',`')
+   		    ))
+    | (!NsendOPK run SendInitialWithOPK(secb,secIKA0,IKA,secIKAsign,IKAsign
+      	         ifdef(`DH',`, hk2',`')
+   		 ))
+    | (!NsendNoOPK run SendInitialNoOPK(secb,secIKA0,IKA,secIKAsign,IKAsign
+      	          ifdef(`DH',`, hk',`')
+   		 ))      
+    )
+    
+)
+ifdef(`DH',`| run hashoracle(hk)',`')    
+ifdef(`DH',`| run hashoracle2(hk2)',`')
+
+ifdef(`KEM',`
+(*
+All queries proved.
+10.96user 0.05system 0:11.08elapsed 99%CPU (0avgtext+0avgdata 98560maxresident)k
+*)
+')
+ifdef(`DH',`
+(*
+All queries proved.
+69.38user 0.15system 1:09.74elapsed 99%CPU (0avgtext+0avgdata 226416maxresident)k
+*)
+',`')

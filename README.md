@@ -82,6 +82,28 @@ The main limitation of our analysis are:
 * we don't have all possible compromise we would want in the CryptoVerif model, so the computational analysis could be improved in this direction;
 * putting the public key in the AD does not exactly mimic the behaviour of what Kyber does by including the public key in the shared secret.
 
+## Proposals for revision 3
+
+Exchanging with Signal's developpers, we are currently investating several changes to the specification that would imply changes to the implementation.
+
+We provide here a model where:
+- P1: the F prefix in the hash function is removed. It does not seem to be needed anymore, compared to X3DH, as the info avoid any confusion.
+- P2: we directly put more information inside the KDF, at least the KEM pubic key, and are considering putting even more elements of the transcript.
+- P3: we add public key type identifiers (last resort or one time) in the signatures of the PQPK.
+
+
+Based on the new models, the observations are that:
+- P1 does not indeed change the security results, so it is a good simplification
+- P2 is interesting, it in fact simplifies the proof, by making sure even without the AEAD so two parties compute the same key only when they use the same PQPK.
+- P3 does not enable us to verify any new security properties, as an untrusted server can always only send the last resort PQPK (but at least, now the initiator is aware of it). Improved monitoring of the server still requires some work.
+
+Adding even more elements to the transcript, such as the other DH public keys, while good practice, does not always bring any obvious new security property. This also needs further exploring.
+Some remarks on this:
+- adding the IK_A and IK_B in the transcript also enables us to remove them from the AEAD AD, and as for the PQPK, make sure that two parties derive the same key only when they agree on the IKs used. This one is a bit more important, as for the moment, we need the AEAD AD to ensure that no small sub group equivalent public key of IK_A or IK_B was used. 
+- adding the SPK, OPK and EK_A seems more optional. Currently, the parties only agree on those values modulo the small sub group elements. Yet, it does not have any clear security impact.
+
+Overall, including information directly inside the KDF rather than in the AD makes the cryptographic proof simpler, and notably less dependent on the security of the AEAD.
+
 ## Acknowledgements
 
 This analysis is joint work between INRIA and Cryspen, and was carried
@@ -98,4 +120,5 @@ and many insights into the specification and Signal's implementation.
 
 
 [PQXDH]: https://signal.org/docs/specifications/pqxdh/, The PQXDH Key Agreement Protocol
+
 [MCR]: https://classic.mceliece.org/mceliece-rationale-20221023.pdf, Classic McEliece: conservative code-based cryptography: design rationale
