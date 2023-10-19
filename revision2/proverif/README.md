@@ -41,8 +41,8 @@ For each case, we try to come up with an optimal query, which precisely specifie
 
 ## Exhaustive Security results
 
-We now report on the multiple results, obtained when enabling all possible compromises, except the encodeEC/encodeKEM confusion.
-/
+We now report on the multiple results, obtained when enabling all possible compromises.
+
 ### Secrecy of the initiator
 
 The key SK computed by the initiator A is secret, unless:
