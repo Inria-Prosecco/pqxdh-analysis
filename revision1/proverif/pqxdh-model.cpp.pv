@@ -210,22 +210,22 @@ query i:client, r:client, ts:symkey, m:bitstring, opk:point, spk:point, pqpk:kem
 
 #ifdef SecrecyInit
 
-query a,b:client, useOPK:bool, opk,spk:point, pqpk:kempub, ts:symkey, i,j1,j2,j3,j4:time;
+query a,b:client, useOPK:bool, opk,spk:point, pqpk:kempub, ts:symkey, i,j:time;
       event(InitDone(a,b,useOPK,opk,spk,pqpk,ts))@i && attacker(ts) ==>
       (* A compromise of IKB in the past is enough to break everything. *)
-      (event(CompromiseIK(b))@j1 && (j1 < i
+      (event(CompromiseIK(b))@j && (j < i
        				 ||
 				 (
-				  event(CompromiseSPK(b,spk))@j2				
+				  event(CompromiseSPK(b,spk))
 				  &&
-				  (event(CompromisePQPK(b,pqpk))@j4 || event(BrokenKEM)@j4)
+				  (event(CompromisePQPK(b,pqpk)) || event(BrokenKEM))
  				 ))
 
       )
        ||
-       (event(BrokenDH())@j1 && (j1 < i
-       			     ||  event(CompromisePQPK(b,pqpk))@j4
-			     || event(BrokenKEM)@j4
+       (event(BrokenDH())@j && (j < i
+       			     ||  event(CompromisePQPK(b,pqpk))
+			     || event(BrokenKEM)
        			     ))
 .
 
@@ -234,7 +234,7 @@ query a,b:client, useOPK:bool, opk,spk:point, pqpk:kempub, ts:symkey, i,j1,j2,j3
 
 #ifdef SecrecyResp
 
-query a,b:client, useOPK:bool, opk,spk:point, pqpk,pqpk2:kempub, ts:symkey, i,j1,j2,j3,j4,j5:time;
+query a,b:client, useOPK:bool, opk,spk:point, pqpk,pqpk2:kempub, ts:symkey, i,j1,j2,j3:time;
       event(RespondDone(b,a, useOPK, opk,spk,pqpk,ts))@i && attacker(ts) ==>
       (* The compromise of IKA allows the attacker to play the role of A, and thus know the key *)
       (event(CompromiseIK(a))@j1 && j1 < i)
@@ -246,14 +246,14 @@ query a,b:client, useOPK:bool, opk,spk:point, pqpk,pqpk2:kempub, ts:symkey, i,j1
 	       ( 
 	           event(CompromiseIK(b))@j2 && (j2 < i 
 		                                 ||
-						 event(CompromisePQPK(b,pqpk))@j3
+						 event(CompromisePQPK(b,pqpk))
 						 ||
-						 event(BrokenKEM)@j3
+						 event(BrokenKEM)
 						 ||
 						 
 						 (event(CompromisePQPK(b,pqpk2))@j3 && j3 <i)
 						 )
-	        && (useOPK=false || event(CompromiseOPK(b,opk))@j4)
+	        && (useOPK=false || event(CompromiseOPK(b,opk)))
 
                )
 	      )
@@ -262,11 +262,11 @@ query a,b:client, useOPK:bool, opk,spk:point, pqpk,pqpk2:kempub, ts:symkey, i,j1
 	 ||
         (event(BrokenDH())@j1 && (j1 < i
 			      	 ||
-				 event(CompromisePQPK(b,pqpk))@j3
+				 event(CompromisePQPK(b,pqpk))
 				 ||
-				 event(BrokenKEM)@j4
+				 event(BrokenKEM)
 				 ||
-				 (event(CompromisePQPK(b,pqpk2))@j3 && j3 <i)
+				 (event(CompromisePQPK(b,pqpk2))@j2 && j2 <i)
 				 ||
 				 (event(CompromiseIK(b))@j2 && j2 < i)
 				 )
@@ -277,31 +277,31 @@ query a,b:client, useOPK:bool, opk,spk:point, pqpk,pqpk2:kempub, ts:symkey, i,j1
 
 #ifdef Authentication
 
-query a,b:client, useOPK:bool, opk,opk2,spk:point, pqpk,pqpk2:kempub, ts:symkey, i,j1,j2,j3,j4,j5:time;
+query a,b:client, useOPK:bool, opk,opk2,spk:point, pqpk,pqpk2:kempub, ts:symkey, i,j:time;
       event(RespondDone(b,a,useOPK,opk,spk,pqpk,ts))@i ==>
       (* authentication including over the opk *)
-       (useOPK = true && event(InitDone(a,b,true, opk,spk,pqpk,ts))@j1)
+       (useOPK = true && event(InitDone(a,b,true, opk,spk,pqpk,ts)))
        ||
       (* authentication not over the opk *)       
-       (useOPK = false && event(InitDone(a,b,false, opk2,spk,pqpk,ts))@j1)       
+       (useOPK = false && event(InitDone(a,b,false, opk2,spk,pqpk,ts)))
        (* Unless *)
        ||
        (* The compromise of IKA allows the attacker to play the role of A, and thus know the key *)
-       (event(CompromiseIK(a))@j1 && j1 < i)
+       (event(CompromiseIK(a))@j && j < i)
        ||
        (* this allow to decrypt ct and reencrypt it for other pq key *)
-       (event(CompromisePQPK(b,pqpk2))@j3 && j3 <i)
+       (event(CompromisePQPK(b,pqpk2))@j && j <i)
        ||
        (* this allow to decrypt ct and reencrypt it for other pq key *)       
-       (event(BrokenKEM)@j4 && j4 <i)
+       (event(BrokenKEM)@j && j <i)
        ||					
        (* this allow to create a custum PQPK decrypt ct and reencaps against honest PQPK *)
-       (event(CompromiseIK(b))@j3 && j3 <i)
+       (event(CompromiseIK(b))@j && j <i)
        ||
        (* Knowing a SPK completely allows to break auth *)
-       (event(CompromiseSPK(b,spk))@j1 &&  j1 < i )
+       (event(CompromiseSPK(b,spk))@j &&  j < i )
        ||
-       (event(BrokenDH())@j1 && j1 < i)
+       (event(BrokenDH())@j && j < i)
 .
 
 #endif
@@ -315,15 +315,15 @@ query a,b:client, useOPK:bool, opk,opk2,spk:point, pqpk,pqpk2:kempub, ts:symkey,
 
 (* If falsified, the PQ DH security does not work, illustrated here by leaking both DH keys, and expecting that still breaking the KEM should be needed. *)
 
-query a,b:client, useOPK:bool, opk,spk:point, pqpk:kempub, ts:symkey, i,j1,j2,j3,j4:time;
+query a,b:client, useOPK:bool, opk,spk:point, pqpk:kempub, ts:symkey, i,j:time;
       event(InitDone(a,b,useOPK,opk,spk,pqpk,ts))@i && attacker(ts) ==>
       (* A compromise of IKB in the past is enough to break everything. *)
-      (event(CompromiseIK(b))@j1 && (j1 < i
+      (event(CompromiseIK(b))@j && (j < i
        				 ||
 				 (
-				  event(CompromiseSPK(b,spk))@j2				
+				  event(CompromiseSPK(b,spk))
 				  &&
-				  event(CompromisePQPK(b,pqpk))@j4
+				  event(CompromisePQPK(b,pqpk))
  				 ))
 
       )
@@ -332,24 +332,39 @@ query a,b:client, useOPK:bool, opk,spk:point, pqpk:kempub, ts:symkey, i,j1,j2,j3
 #endif
 
 
+
+
+
 #ifdef ReEncaps
 
+(* Here, we put the authentication security property that we in fact
+   would like to be able to prove.  However, due to the possible
+   rencapsulation attacks, ProVerif falsifies this query This
+   demonstrates that we do not have session independance, and that if
+   the KEM is insecure, we in fact have lower guarantees with it than
+   without it. We are thus forced here to prove in Authentication and
+   RespSecrecy weaker properties.  *)
 
-query a,b:client, useOPK:bool, opk,opk2,spk:point, pqpk,pqpk2:kempub, ts:symkey, i,j1,j2,j3,j4,j5:time;
+
+query a,b:client, useOPK:bool, opk,opk2,spk:point, pqpk:kempub, ts:symkey, i,j:time;
       event(RespondDone(b,a,useOPK,opk,spk,pqpk,ts))@i ==>
       (* authentication including over the opk *)
-       (useOPK = true && event(InitDone(a,b,true, opk,spk,pqpk,ts))@j1)
+       (useOPK = true && event(InitDone(a,b,true, opk,spk,pqpk,ts)))
        ||
       (* authentication not over the opk *)       
-       (useOPK = false && event(InitDone(a,b,false, opk2,spk,pqpk,ts))@j1)       
+       (useOPK = false && event(InitDone(a,b,false, opk2,spk,pqpk,ts)))
        (* Unless *)
        ||
        (* The compromise of IKA allows the attacker to play the role of A, and thus know the key *)
-       (event(CompromiseIK(a))@j1 && j1 < i)
+       (event(CompromiseIK(a))@j && j < i)
        ||
        (* Knowing a SPK completely allows to break auth *)
-       (event(CompromiseSPK(b,spk))@j1 &&  j1 < i )
+       (event(CompromiseSPK(b,spk))@j &&  j < i )
+       ||
+       (event(BrokenDH())@j && j < i)
 .
+
+
 
 #endif
 
@@ -625,22 +640,19 @@ process
 
 $ make 
 
-
 --------------------------------------------------------------
 Verification summary:
 
-Query event(InitDone(a,b,useOPK_1,opk,spk,pqpk,ts))@i_2 && attacker(ts) ==> (event(CompromiseIK(b))@j1 && (i_2 > j1 || (event(CompromiseSPK(b,spk))@j2 && (event(CompromisePQPK(b,pqpk))@j4 || event(BrokenKEM)@j4)))) || (event(BrokenDH)@j1 && (i_2 > j1 || event(CompromisePQPK(b,pqpk))@j4 || event(BrokenKEM)@j4)) is true.
+Query event(InitDone(a,b,useOPK_1,opk,spk,pqpk,ts))@i_2 && attacker(ts) ==> (event(CompromiseIK(b))@j && (i_2 > j || (event(CompromiseSPK(b,spk)) && (event(CompromisePQPK(b,pqpk)) || event(BrokenKEM))))) || (event(BrokenDH)@j && (i_2 > j || event(CompromisePQPK(b,pqpk)) || event(BrokenKEM))) is true.
 
-Query event(RespondDone(b,a,useOPK_1,opk,spk,pqpk,ts))@i_2 && attacker(ts) ==> (event(CompromiseIK(a))@j1 && i_2 > j1) || (event(CompromiseSPK(b,spk))@j1 && (i_2 > j1 || (event(CompromiseIK(b))@j2 && (i_2 > j2 || event(CompromisePQPK(b,pqpk))@j3 || event(BrokenKEM)@j3 || (event(CompromisePQPK(b,pqpk2))@j3 && i_2 > j3)) && (useOPK_1 = false || event(CompromiseOPK(b,opk))@j4)))) || (event(BrokenDH)@j1 && (i_2 > j1 || event(CompromisePQPK(b,pqpk))@j3 || event(BrokenKEM)@j4 || (event(CompromisePQPK(b,pqpk2))@j3 && i_2 > j3) || (event(CompromiseIK(b))@j2 && i_2 > j2))) is true.
+Query event(RespondDone(b,a,useOPK_1,opk,spk,pqpk,ts))@i_2 && attacker(ts) ==> (event(CompromiseIK(a))@j1 && i_2 > j1) || (event(CompromiseSPK(b,spk))@j1 && (i_2 > j1 || (event(CompromiseIK(b))@j2 && (i_2 > j2 || event(CompromisePQPK(b,pqpk)) || event(BrokenKEM) || (event(CompromisePQPK(b,pqpk2))@j3 && i_2 > j3)) && (useOPK_1 = false || event(CompromiseOPK(b,opk)))))) || (event(BrokenDH)@j1 && (i_2 > j1 || event(CompromisePQPK(b,pqpk)) || event(BrokenKEM) || (event(CompromisePQPK(b,pqpk2))@j2 && i_2 > j2) || (event(CompromiseIK(b))@j2 && i_2 > j2))) is true.
 
-Query event(RespondDone(b,a,useOPK_1,opk,spk,pqpk,ts))@i_2 ==> (useOPK_1 = true && event(InitDone(a,b,true,opk,spk,pqpk,ts))@j1) || (useOPK_1 = false && event(InitDone(a,b,false,opk2,spk,pqpk,ts))@j1) || (event(CompromiseIK(a))@j1 && i_2 > j1) || (event(CompromisePQPK(b,pqpk2))@j3 && i_2 > j3) || (event(BrokenKEM)@j4 && i_2 > j4) || (event(CompromiseIK(b))@j3 && i_2 > j3) || (event(CompromiseSPK(b,spk))@j1 && i_2 > j1) || (event(BrokenDH)@j1 && i_2 > j1) is true.
+Query event(RespondDone(b,a,useOPK_1,opk,spk,pqpk,ts))@i_2 ==> (useOPK_1 = true && event(InitDone(a,b,true,opk,spk,pqpk,ts))) || (useOPK_1 = false && event(InitDone(a,b,false,opk2,spk,pqpk,ts))) || (event(CompromiseIK(a))@j && i_2 > j) || (event(CompromisePQPK(b,pqpk2))@j && i_2 > j) || (event(BrokenKEM)@j && i_2 > j) || (event(CompromiseIK(b))@j && i_2 > j) || (event(CompromiseSPK(b,spk))@j && i_2 > j) || (event(BrokenDH)@j && i_2 > j) is true.
 
 --------------------------------------------------------------
 
 
-real	5m59,177s
-
-
+real	7m32,738s
 
 
 *)
@@ -673,12 +685,13 @@ $ make confuseKemEc
 --------------------------------------------------------------
 Verification summary:
 
-Query event(InitDone(a,b,useOPK_1,opk,spk,pqpk,ts))@i_1 && attacker(ts) ==> event(CompromiseIK(b))@j1 && (i_1 > j1 || (event(CompromiseSPK(b,spk))@j2 && event(CompromisePQPK(b,pqpk))@j4)) cannot be proved.
+Query event(InitDone(a,b,useOPK_1,opk,spk,pqpk,ts))@i_1 && attacker(ts) ==> event(CompromiseIK(b))@j && (i_1 > j || (event(CompromiseSPK(b,spk)) && event(CompromisePQPK(b,pqpk)))) cannot be proved.
 
 --------------------------------------------------------------
 
 
-real	0m9,533s
+real	0m14,436s
+
 
 *)
 
@@ -688,10 +701,11 @@ $ make reEncaps
 --------------------------------------------------------------
 Verification summary:
 
-Query event(RespondDone(b,a,useOPK_1,opk,spk,pqpk,ts))@i_2 ==> (useOPK_1 = true && event(InitDone(a,b,true,opk,spk,pqpk,ts))@j1) || (useOPK_1 = false && event(InitDone(a,b,false,opk2,spk,pqpk,ts))@j1) || (event(CompromiseIK(a))@j1 && i_2 > j1) || (event(CompromiseSPK(b,spk))@j1 && i_2 > j1) is false.
+Query event(RespondDone(b,a,useOPK_1,opk,spk,pqpk,ts))@i_1 ==> (useOPK_1 = true && event(InitDone(a,b,true,opk,spk,pqpk,ts))) || (useOPK_1 = false && event(InitDone(a,b,false,opk2,spk,pqpk,ts))) || (event(CompromiseIK(a))@j && i_1 > j) || (event(CompromiseSPK(b,spk))@j && i_1 > j) || (event(BrokenDH)@j && i_1 > j) is false.
 
 --------------------------------------------------------------
 
 
-real	0m20,829s
+real	0m24,606s
+
 *)
