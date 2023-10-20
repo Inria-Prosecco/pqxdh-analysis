@@ -74,6 +74,8 @@ This makes it so that when a responder accepts a conversation believing to have 
 Here, the compromise of a PQPK, one time or last resort, that a responder did not use for this session, still allow the attacker to obtain the ss of this responder session. This breaks an usual session independency feature (compromise of ephemeral material of other sessions should not impact the security of an uncompromised session). And it in fact implies that the compromise of a single responder's PQPK implies the compromise of all its other PQPKs.
  
 Importantly, Kyber does not allow such reencapsulation by tying the shared secret to the public key, but once again, this is not covered by the IND-CCA assumption.
+
+Defining the precise assumption needed over the KEM to get security is unclear. Notably, compared to other notions such as (w/s)CFR-CCA, called collision freeness, see e.g. [KX, Fig 2], in our case, the attacker does have access to the secret key of one KEM. This seems to indicate that the existing notions are not satisfactory for the current Signal use case.
  
 ### Fix 2
 
@@ -174,3 +176,8 @@ With the Makefile:
 
 
 For each scenario, timings and expected result can be found at the bottom of the file.
+
+
+# References 
+
+[KX]Anonymity of NIST PQC Round 3 KEMs. Keita Xagawa. EuroCrypt 22.  https://eprint.iacr.org/2021/1323.pdf

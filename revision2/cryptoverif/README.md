@@ -22,7 +22,7 @@ The file models:
 
 The main limitation of the model is that we split the identity key IK into two keys, one DH key and one signing key. In practice, a single DH IK is used both for X25519 operations and XEdDSA signatures. To be completely precise, one would thus need to analyze the protocol under the gapDH assumption while also assuming that the attacker can obtain DH computations through the oracle signature. Such a proof does not exist in the litterature (also, while Ed25519 is proved, XEdDSA is not, which is a small gap). For instance, [8] proves the security of X3DH assuming gapDH, but also assuming that in fact all signed prekeys are pre-authenticated, and simply drop the signature question. Our model is thus more fine-grained. 
 
-This limitation is mentioned in  [PQXDH, sec X]
+This limitation is mentioned in  [PQXDH, sec 4]
 
 A second limitation here is that we cannot prove anything w.r.t. to whether an untrusted server only gives the last resort PQPK, or never gives any OPK. This echoes the security consideration in 4.9.
 
