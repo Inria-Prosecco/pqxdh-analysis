@@ -71,11 +71,9 @@ Consider the following execution.
 
 This makes it so that when a responder accepts a conversation believing to have used some PQPKB, the initiator may have used another one.
 
-It has two consequences:
- * a malicious could force all initiators to always use the last resort PQPK key, and the responder would never notice anything awry.
- * the compromise of a PQPK, one time or last resort, that a responder did not use for this session, still allow the attacker to obtain the ss of this responder session. This breaks an usual session independency feature (compromise of ephemeral material of other sessions should not impact the security of an uncompromised session). 
+Here, the compromise of a PQPK, one time or last resort, that a responder did not use for this session, still allow the attacker to obtain the ss of this responder session. This breaks an usual session independency feature (compromise of ephemeral material of other sessions should not impact the security of an uncompromised session). And it in fact implies that the compromise of a single responder's PQPK implies the compromise of all its other PQPKs.
  
- Importantly, Kyber does not allow such reencapsulation, but once again, this is not covered by the IND-CCA assumption.
+Importantly, Kyber does not allow such reencapsulation by tying the shared secret to the public key, but once again, this is not covered by the IND-CCA assumption.
  
 ### Fix 2
 
