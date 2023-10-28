@@ -84,7 +84,7 @@ The main limitation of our analysis are:
 
 ## Proposals for revision 3
 
-Exchanging with Signal's developpers, we are currently investating several changes to the specification that would imply changes to the implementation.
+Exchanging with Signal's developers, we are currently investigating several changes to the specification that would imply changes to the implementation.
 
 We provide here a model where:
 - P1: the F prefix in the hash function is removed. It does not seem to be needed anymore, compared to X3DH, as the info avoid any confusion.
