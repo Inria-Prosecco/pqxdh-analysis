@@ -299,7 +299,7 @@ letfun H5(g1:G,g2:G,g3:G, k:kemsec, i:kdf_info) = H(c4(g1,g2,g3,i),k).
 letfun H6(g1:G,g2:G,g3:G,g4:G, k:kemsec, i:kdf_info) = H(c5(g1,g2,g3,g4,i),k).
 
 equation forall g1,g1p:G, g2,g2p:G, g3,g3p:G, g4:G, i,ip:kdf_info;
-       c4(g1,g2,g3,i) <> c5(g1,g2,g3,g4,i).
+       c4(g1,g2,g3,i) <> c5(g1p,g2p,g3p,g4,ip).
 
 
 ',`')
@@ -773,7 +773,7 @@ ifdef(`DH',`| run hashoracle2(hk2)',`')
 ifdef(`KEM',`
 (*
 All queries proved.
-10.96user 0.05system 0:11.08elapsed 99%CPU (0avgtext+0avgdata 98560maxresident)k
+9.28user 0.04system 0:09.39elapsed 99%CPU (0avgtext+0avgdata 98072maxresident)k
 *)
 ')
 ifdef(`DH',`
