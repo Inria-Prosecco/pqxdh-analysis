@@ -2,7 +2,8 @@ This folder contains ProVerif model of the PQXDH protocol, as specified in:
 
 [PQXDH] : https://signal.org/docs/specifications/pqxdh/
 	  The PQXDH Key Agreement Protocol
-	  Revision 2
+	  Revision 3
+
 
 <!> this is in fact a proposal with exploration of changes for a revision 3.
 
@@ -21,6 +22,7 @@ The file models:
 * AD goes to zero
 * F flag is dropped
 * added a boolean flag in the KEMEncode to identify last resort keys
+
 
 ## Threat Model
 

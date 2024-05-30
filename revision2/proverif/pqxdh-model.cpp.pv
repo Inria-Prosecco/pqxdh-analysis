@@ -16,17 +16,25 @@ Authors: Karthikeyan Bhargavan <karthik@cryspen.com>
 (* for primitives in Sec 2.2 Cryptographic notation *)
 (*-----------------------------------*)
 
-
 (* Elliptic Curve Diffie-Hellman *)
 type scalar.
 type point.
+
 const G:point.
+const Gneutral:point.
+
 fun SMUL(scalar,point):point.
 equation forall y : scalar, z : scalar;
          SMUL(y, SMUL(z, G)) = SMUL(z, SMUL(y, G)).
 
+fun smul(scalar,point):point
+reduc forall x:scalar;
+      smul(x,Gneutral) = Gneutral
+      otherwise forall x:scalar, y:point; smul(x,y) = SMUL(x,y).
+
+
 letfun s2p(s:scalar) = SMUL(s,G).
-letfun dh(s:scalar,p:point) = SMUL(s,p).
+letfun dh(s:scalar,p:point) = smul(s,p).
 
 (* KEM Encapsulation *)
 type kempriv.
@@ -51,10 +59,6 @@ letfun pqkem_dec(sk:kempriv,ct:bitstring) =
 (* the domains are disjoints, see [PQXDH] *)
 fun encodeEC(point):bitstring [data].
 fun encodeKEM(kempub):bitstring [data].
-
-
-reduc forall x:scalar, y:point; smul(x,y) = SMUL(x,y).
-
 
 
 (* Bitstring manipulations *)
@@ -111,6 +115,11 @@ reduc forall sk:scalar,m:bitstring,n:nonce;
 
 
 
+event isBool(bool).
+
+restriction b:bool;
+ event(isBool(b)) ==> b=true || b=false. 
+
 (*-----------------------------------*)
 (*          PKI                      *)
 (*-----------------------------------*)
@@ -137,10 +146,6 @@ free att:channel.
 
 free server:channel.
 
-(* For Testing
-event Reachable().
-query event(Reachable()).
-*)
 
 (* An event triggered when the private keys of a client are compromised *)
 
@@ -196,6 +201,7 @@ query a,b:client, useOPK:bool, opk,spk:point, pqpk:kempub, ts:symkey, i,j:time;
 			     || event(BrokenKEM)
        			     ))
 .
+
 
 
 #endif
@@ -260,10 +266,9 @@ query a,b:client, useOPK:bool, opk,opk2,spk:point, pqpk:kempub, ts:symkey, i,j:t
 
 
 
-nounif z:scalar; attacker(SMUL(z,G)) / 30000.
-(*
-set verboseRules=true. 
-*)
+ nounif z:scalar; attacker(SMUL(z,G)) / 30000. 
+
+
 (* DH breaks down *)
 fun discreteLog(point): scalar 
 reduc forall s:scalar, y:point;
@@ -305,10 +310,14 @@ let kem_attacks() =
    - An initial ciphertext encrypted with some AEAD encryption scheme [5] using AD as associated data and using an encryption key which is either SK or the output from some cryptographic PRF keyed by SK.
 *)
 
+const init:bitstring.
+const resp:bitstring.
+    
+
 let Initiator(i:client, IKA_s:scalar) =
     (* we let the attacker choose the responder we will communicate with *)
     in(att,r:client);
-(*    if not(r=i) then *)
+    (*    if not(r=i) then *)
     (* Initiator public key *)
     let IKA_p = s2p(IKA_s) in
     
@@ -324,48 +333,35 @@ let Initiator(i:client, IKA_s:scalar) =
     (
      (* Optionally receive a one time key *)
      in (server,(useOPK:bool,OPKB_p:point));
+     event isBool(useOPK);
      let (CT:bitstring,SS:bitstring) = pqkem_enc(PQPKB_p) in
      
      new EKA_s:scalar;
-(*     event SecEKA(i,EKA_s); *)
      
      let EKA_p = s2p(EKA_s) in
      let DH1 = dh(IKA_s,SPKB_p) in
      let DH2 = dh(EKA_s,IKB_p) in
      let DH3 = dh(EKA_s,SPKB_p) in
-     if useOPK then
-     	(
-	let DH4 = dh(EKA_s,OPKB_p) in  
-        let SK = kdf(concat5(DH1,DH2,DH3,DH4,SS)) in
 
-	event InitDone(i,r,true,OPKB_p,SPKB_p,PQPKB_p,SK);
+     let SK = 
+        (if useOPK then (let DH4 = dh(EKA_s,OPKB_p) in  kdf(concat5(DH1,DH2,DH3,DH4,SS)))
+        else kdf(concat4(DH1,DH2,DH3,SS)))
+     in
+     
+	event InitDone(i,r,useOPK,OPKB_p,SPKB_p,PQPKB_p,SK);
 
+	(* Removing from the ad the PQPKB_p reintroduces the re-encapsulation attack *)
         let ad = concatIKKEM(IKA_p,IKB_p,PQPKB_p) in
         new msg_nonce: bitstring;
         let msg = app_message(i,r,msg_nonce) in
         let enc_msg = aead_enc(SK,empty_nonce,msg,ad) in
         (* Send Message *)
         out(server, (IKA_p,EKA_p,CT,  OPKB_p, SPKB_p, PQPKB_p, enc_msg))
-	)
-#if !defined(DisableNoOPK)	
-     else
-	(
-        let SK = kdf(concat4(DH1,DH2,DH3,SS)) in
-
-	event InitDone(i,r,false,OPKB_p,SPKB_p,PQPKB_p,SK);
-
-        let ad = concatIKKEM(IKA_p,IKB_p,PQPKB_p) in
-        new msg_nonce: bitstring;
-        let msg = app_message(i,r,msg_nonce) in
-        let enc_msg = aead_enc(SK,empty_nonce,msg,ad) in
-        (* Send Message *)
-        out(server, (IKA_p,EKA_p,CT,  OPKB_p, SPKB_p, PQPKB_p, enc_msg))
-	)
-#endif	
+	
      ).
 
 
-let Responder_with_OPK(r:client, IKB_s:scalar, SPKB_s:scalar,PQSPKB_s:kempriv)=
+let Responder_mess(r:client, IKB_s:scalar, SPKB_s:scalar,PQSPKB_s:kempriv)=
     (
     let IKB_p = s2p(IKB_s) in    
     let SPKB_p = s2p(SPKB_s) in
@@ -374,7 +370,7 @@ let Responder_with_OPK(r:client, IKB_s:scalar, SPKB_s:scalar,PQSPKB_s:kempriv)=
     (* Generate a new one time OPKB *)
     new OPKB_s:scalar;
     let OPKB_p = s2p(OPKB_s) in
-(*    event SecOPK(r, OPKB_s); *)
+
     (* send public keys to server *)
     out (server,OPKB_p );
 
@@ -384,64 +380,29 @@ let Responder_with_OPK(r:client, IKB_s:scalar, SPKB_s:scalar,PQSPKB_s:kempriv)=
 
     (* Receive Message with the currently stored public keys *)
     (
-    in (server,(IKA_p:point,EKA_p:point,CT:bitstring,=OPKB_p,=SPKB_p,=PQSPKB_p, enc_msg:bitstring)) [precise];
-
+    in (server,(IKA_p:point,EKA_p:point,CT:bitstring,useOPK:bool,=OPKB_p,=SPKB_p,=PQSPKB_p, enc_msg:bitstring));
+    event isBool(useOPK);
     (* Verify remote identity key *)
     get identity_pubkeys(i,=IKA_p) in
-(*    if not(r=i) then    *)
+    (*    if not(r=i) then    *)
       (
      (* Retrieve one-time private keys *)
 
        let SS = pqkem_dec(PQSPKB_s,CT) in
        let DH1 = dh(SPKB_s,IKA_p) in
        let DH2 = dh(IKB_s, EKA_p) in
-       let DH3 = dh(SPKB_s,EKA_p) in
-       let DH4 = dh(OPKB_s,EKA_p) in	          
+       let DH3 = dh(SPKB_s,EKA_p) in        
        let SK =
-
-         	   kdf(concat5(DH1,DH2,DH3,DH4,SS))
-
+        (if useOPK then (let DH4 = dh(OPKB_s,EKA_p) in  kdf(concat5(DH1,DH2,DH3,DH4,SS)))
+        else kdf(concat4(DH1,DH2,DH3,SS)))
        in
-     
+
+	(* Removing from the ad the PQPKB_p reintroduces the re-encapsulation attack *)
        let ad = concatIKKEM(IKA_p,IKB_p,PQSPKB_p) in
        let msg = aead_dec(SK,empty_nonce,enc_msg,ad) in
-       event RespondDone(r,i,true,OPKB_p,SPKB_p,PQSPKB_p,SK)
+       event RespondDone(r,i,useOPK,OPKB_p,SPKB_p,PQSPKB_p,SK)
+
       )
-     ) 
-    ).
-
-
-let Responder_no_OPK(r:client, IKB_s:scalar, SPKB_s:scalar,PQSPKB_s:kempriv)=
-    (
-    let IKB_p = s2p(IKB_s) in    
-    let SPKB_p = s2p(SPKB_s) in
-    let PQSPKB_p = kempriv2pub(PQSPKB_s) in
-
-    (* Receive Message with the currently stored public keys *)
-    
-    in (server,(IKA_p:point,EKA_p:point,CT:bitstring,=SPKB_p,=PQSPKB_p, enc_msg:bitstring));
-
-    (* Verify remote identity key *)
-    get identity_pubkeys(i,=IKA_p) in
-(*    if not(r=i) then    *)
-      (
-     (* Retrieve one-time private keys *)
-
-       let SS = pqkem_dec(PQSPKB_s,CT) in
-       let DH1 = dh(SPKB_s,IKA_p) in
-       let DH2 = dh(IKB_s, EKA_p) in
-       let DH3 = dh(SPKB_s,EKA_p) in
-       let SK =
-
-	    	   kdf(concat4(DH1,DH2,DH3,SS))
-
-
-       in
-     
-       let ad = concatIKKEM(IKA_p,IKB_p,PQSPKB_p) in
-       let msg = aead_dec(SK,empty_nonce,enc_msg,ad) in
-       event RespondDone(r,i,false,G,SPKB_p,PQSPKB_p,SK)
-      
      ) 
     ).
 
@@ -451,14 +412,12 @@ let Responder(r:client, IKB_s:scalar) =
 
     (* Creates a new DH based Signed Pre-Key *)
     new SPKB_s:scalar;
-(*    event SecSPK(r,SPKB_s); *)
     let SPKB_p = s2p(SPKB_s) in
     new zSPKB:nonce;
     let SPKB_sig = sign(IKB_s,encodeEC(SPKB_p),zSPKB) in
 
     (* Creates a new KEM based Signed Pre-Key *)
     new PQSPKB_s:kempriv;
-(*    event SecPQSPK(r,PQSPKB_s); *)
     let PQSPKB_p = kempriv2pub(PQSPKB_s) in
     new zPQSPKB:nonce;
     let PQSPKB_sig = sign(IKB_s,encodeKEM(PQSPKB_p),zPQSPKB) in    
@@ -471,11 +430,7 @@ let Responder(r:client, IKB_s:scalar) =
     |
     (in(att, =r); event CompromisePQPK(r, PQSPKB_p); out(att,PQSPKB_s))
     |
-    (! Responder_with_OPK(r, IKB_s, SPKB_s,PQSPKB_s))
-#if !defined(DisableNoOPK)	    
-    | (! Responder_no_OPK(r, IKB_s, SPKB_s,PQSPKB_s))
-#endif    
-   
+    (! Responder_mess(r, IKB_s, SPKB_s,PQSPKB_s))   
 .
 
 
@@ -483,15 +438,14 @@ let Responder(r:client, IKB_s:scalar) =
 let Launch_pqxdh_client(p:client) =
    (* Create a new client *)
    new IK_s:scalar;
-    let IK_p = s2p(IK_s) in
-(*    event SecIK(p,IK_s); *)
-    insert identity_pubkeys(p,IK_p);
+   let IK_p = s2p(IK_s) in
+   insert identity_pubkeys(p,IK_p);
     (* Publish the public key identity pair. *)
-    out(att,IK_p);
+   out(att,IK_p);
     (
       (* Initiator role *)
       ! Initiator(p, IK_s)
-      (* Responder role without OPK *)   
+      (* Responder role *)   
       | ! Responder(p, IK_s)
 
       |
@@ -535,14 +489,14 @@ Query event(RespondDone(b,a,useOPK_1,opk,spk,pqpk,ts))@i_2 ==> (useOPK_1 = true 
 
 --------------------------------------------------------------
 
-real	3m51,094s
+real	1m43,094s
 
 
 *)
 
 (*
 
-$ make 
+$ make reach
 
 --------------------------------------------------------------
 Verification summary:
@@ -558,6 +512,6 @@ Query not event(RespondDone(r_1,i_2,false,opk,spk,pqpk,ts)) is false.
 --------------------------------------------------------------
 
 
-real	0m1,198s
+real	0m0,9
 
 *)
