@@ -1,5 +1,22 @@
 This repository contains a formal analysis of PQXDH, using ProVerif and CryptoVerif.
 
+It is the artifact for the research paper `Formal verification of the PQXDH Post-Quantum key agreement protocol for end-to-end secure messaging`, by Karthikeyan Bhargavan, Charlie Jacomme, Franziskus Kiefer, and Rolfe Schmidt, published at USENIX Security 2024.
+
+ * `revision1`  contains the analysis of the specification of revision 1, both with ProVerif and CryptoVerif;
+ * `revision2` contains the anlysis of the specification of revision 2, both with CryptoVerif and ProVerif;
+ * `revision3` contains the anlysis of some attemps at coming up with a revision 3, still both with CryptoVerif and ProVerif;
+ * `revision1-WithKyberCR` contains a complement to the analysis of revision 1 in CryptoVerif, by also considering that the implementation uses Kyber, which we prove to satisfy an additional collision resistance property.
+
+## Checking the proof
+
+Each subfolder contain a dedicated README describing the files.
+
+We rely on Proverif 2.04 and CryptoVerif 2.08pl1, easily installed with `opam install proverif` and `opam install cryptoverif` if one has the `opam` ocaml package manager, see the respective webpages otherwise for dedicated installation instructions.
+
+Files may use  preprocessors to enable modeling efficiently several variants of a protocol, a Makefile then gives the appropriate commands to verify the file.
+
+Each file contains it's expected runtime, obtained on a   11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz, with 31Gb of RAM.
+
 # Background on formal methods
 
 Formal methods in security aim at providing very strong guarantees over the specifications of security protocols. It does so notably by doing computer-aided cryptography, a program is going to either do or verify the security proof.
@@ -103,6 +120,13 @@ Some remarks on this:
 - adding the SPK, OPK and EK_A seems more optional. Currently, the parties only agree on those values modulo the small sub group elements. Yet, it does not have any clear security impact.
 
 Overall, including information directly inside the KDF rather than in the AD makes the cryptographic proof simpler, and notably less dependent on the security of the AEAD.
+
+## Revision 1 with Kyber
+
+To justify the security of the existing implementation, we pushed further the analysis regarding the fact that " Kyber in facts ties the shared secret to the KEM public key."
+
+We developped a dedicated collision resistance notion on KEMs that capture this intuition, proved it for Kyber, and proved that PQXDH under this additional assumption does ensure the authentication o the PQPSK, thus thwarting F4.
+
 
 ## Acknowledgements
 

@@ -1,0 +1,189 @@
+
+proof {
+simplify coll_elim(variables:z_1);
+insert before "if secb" "if pk_6 = pk' then";
+insert before_nth 1 "if secb" "if ct_3 = c_1 then";
+
+all_simplify;
+all_simplify;
+success
+}
+
+
+(* Types for abstract CPA KEM *)
+
+ 
+type cpa_pk [bounded].
+type cpa_sk [bounded].
+type cpa_ciphertext [bounded].
+type cpa_key_seed [large,fixed].
+type cpa_enc_seed [large,fixed].
+
+
+
+
+(* Types for final CCA  KEM *)
+
+type kemskey [bounded].
+
+type ciphertext.
+type kem_seed [large,fixed].
+type kem_enc_seed [large,fixed].
+
+
+type kemsec [large,fixed].
+
+type kem_keypair.
+fun KEM_KeyPair(cpa_pk, kemskey) : kem_keypair [data].
+
+
+
+(* Hash functions *)
+
+type hashes [bounded]. (* H output *)
+
+type B [large,fixed].
+type hashkey [large,fixed]. 
+proba qH2.
+expand CollisionResistant_hash_2(hashkey, B,hashes, kemsec, KDF, hashoracleKDF, qH2).
+
+type hashkey2 [large,fixed].
+
+proba qH3.
+expand CollisionResistant_hash_1(hashkey2, B, hashes, H, hashoracleH, qH3).
+
+fun cpa_pk_to_B(cpa_pk) :B [data].
+
+fun cpa_ct_to_B(cpa_ciphertext) :B [data].
+
+letfun H1(hk2:hashkey2,pk: cpa_pk) =
+       H(hk2, cpa_pk_to_B(pk)).
+
+letfun H2(hk2:hashkey2,b: B) =
+       H(hk2, b).
+
+letfun H3(hk2:hashkey2,ct:cpa_ciphertext) =
+       H(hk2, cpa_ct_to_B(ct) ).
+
+
+proba qH4.
+type hashkey3 [large,fixed].
+expand CollisionResistant_hash_2(hashkey3, hashes, hashes, B, G1, hashoracleG1, qH4).
+
+
+
+fun G2(hashes,hashes) : cpa_enc_seed.
+
+
+
+
+
+fun cpa_pkgen(cpa_key_seed):cpa_pk.
+fun cpa_skgen(cpa_key_seed):cpa_sk.
+
+fun cpa_enc(cpa_pk,hashes, cpa_enc_seed) : cpa_ciphertext.
+fun cpa_dec(cpa_sk,cpa_ciphertext) : hashes.
+
+
+
+
+equation forall m:hashes, s:cpa_key_seed, r:cpa_enc_seed;
+	 cpa_dec( cpa_skgen(s), cpa_enc( cpa_pkgen(s), m, r)) =m.
+
+
+(* type kempkey [bounded]. *) (* this is already cpa_pk *)
+
+
+fun kem_to_cpa_seed(kem_seed) : cpa_key_seed.
+
+
+
+
+
+fun concat4(cpa_sk,cpa_pk,hashes,B) : kemskey [data].
+
+letfun cca_gen(hk2: hashkey2, k : kem_seed)  =
+       z <-R B;
+       cpas <-  kem_to_cpa_seed(k);
+       pk <- cpa_pkgen(cpas);
+       sk' <- cpa_skgen(cpas);
+       sk <- concat4(sk',pk,H1(hk2,pk),z);
+       KEM_KeyPair(pk, sk).
+     
+
+
+
+
+type encapspair.
+fun KEMEncaps(cpa_ciphertext,kemsec) : encapspair [data].
+
+
+fun kseedToB(kem_enc_seed) : B.
+letfun cca_encaps(hk:hashkey, hk2: hashkey2, hk3: hashkey3, pk : cpa_pk, k : kem_enc_seed) =
+       m' <- kseedToB(k);
+       m <- H2(hk2,m');
+       Kt <- G1(hk3,m,H1(hk2,pk));
+       r <- G2(m,H1(hk2,pk));
+       c <- cpa_enc(pk,m,r);
+       KEMEncaps(c,KDF(hk,Kt, H3(hk2,c))).
+
+
+const nullsec : kemsec.
+
+letfun cca_decap(hk:hashkey, hk2: hashkey2, hk3: hashkey3, c : cpa_ciphertext, sk : kemskey) =
+       let concat4(sk',pk,h,z) = sk in
+       m' <- cpa_dec(sk',c);
+       Kt' <- G1(hk3, m',H1(hk2,pk));
+       r' <- G2(m',H1(hk2, pk));
+       c' <- cpa_enc(pk,m',r');
+       (if c = c' then
+              KDF(hk,Kt', H3(hk2,c'))
+	      else
+	     KDF(hk,z, H3(hk2,c)))
+	 else
+	  nullsec (*cannot occur *)
+.       
+
+
+(* We prove the equivalent of 
+
+fun decap(ciphertext, kemskey): kemsec.
+
+fun kem_secret(kempkey, kem_enc_seed) : kemsec.
+fun kem_encap(kempkey, kem_enc_seed): ciphertext.
+
+collision r <-R kem_seed; k <-R kem_enc_seed;  forall ct: ciphertext, pk:kempkey;
+	  return(decap(ct,kemskgen(r))= kem_secret(pk,k))
+	  <=(KEMcollNew)=> return(ct=kem_encap(pk,k) && pk = kempkgen(r)).
+*)
+
+
+query secret secb [cv_bit].
+
+set autoMergeBranches = true.
+set autoSARename = true.
+
+process
+    Start() :=
+    	    hk <-R hashkey;
+    	    hk2 <-R hashkey2;
+    	    hk3 <-R hashkey3;	    
+    	    secb <-R bool;
+    	    r <-R kem_seed;
+	    k <-R kem_enc_seed;
+	    let  KEM_KeyPair(pk, sk) = cca_gen(hk2,r) in
+	    return(r,k);
+
+	    run hashoracleKDF(hk) |
+	    run hashoracleH(hk2) |
+	    run hashoracleG1(hk3) |	  	    
+	    OChall(ct: cpa_ciphertext, pk':cpa_pk) :=
+    	    let KEMEncaps(c,K) = cca_encaps(hk,hk2,hk3,pk',k) in
+	    (
+	    	   if secb then 
+		      	    return(cca_decap(hk,hk2,hk3,ct, sk) = K)
+		    else
+			return( (ct = c) && (pk' = pk))
+				    )
+    
+
